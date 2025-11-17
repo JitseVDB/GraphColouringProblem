@@ -3,6 +3,9 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
 
+// TODO: Add safegaurd to ensure all graphs are valid.
+// TODO: Ensure all functions handle incorrect input gracefully.
+
 /**
  * A class representing graphs.
  *
@@ -16,6 +19,12 @@ public class Graph implements GraphInterface {
 
     // Load DIMACS .col file
     public void loadDIMACS(String filename) throws IOException {
+        // Clear previous graph
+        adjList.clear();
+        colors.clear();
+        edgeCount = 0;
+
+        // Load current graph
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
             String line;
             int n = 0;
@@ -76,6 +85,21 @@ public class Graph implements GraphInterface {
     @Override
     public int getDegree(int v) {
         return adjList.getOrDefault(v, Collections.emptySet()).size();
+    }
+
+    /**
+     * Returns an unmodifiable collection of all neighbors of the given node.
+     *
+     * @param   v
+     *          The node whose neighbors are requested.
+     *
+     * @return  A read-only collection containing all nodes adjacent to v.
+     *          If the node does not exist, an empty collection is returned.
+     *          | result == adjList.containsKey(v) ? adjList.get(v) : Collections.emptySet()
+     */
+    @Override
+    public Collection<Integer> getNeighborsOf(int v) {
+        return Collections.unmodifiableSet(adjList.getOrDefault(v, Collections.emptySet()));
     }
 
     /**
@@ -207,21 +231,6 @@ public class Graph implements GraphInterface {
 
         if (adjList.getOrDefault(u, Collections.emptySet()).remove(v)) edgeCount--;
         adjList.getOrDefault(v, Collections.emptySet()).remove(u);
-    }
-
-    /**
-     * Returns an unmodifiable collection of all neighbors of the given node.
-     *
-     * @param   v
-     *          The node whose neighbors are requested.
-     *
-     * @return  A read-only collection containing all nodes adjacent to v.
-     *          If the node does not exist, an empty collection is returned.
-     *          | result == adjList.containsKey(v) ? adjList.get(v) : Collections.emptySet()
-     */
-    @Override
-    public Collection<Integer> getNeighborsOf(int v) {
-        return Collections.unmodifiableSet(adjList.getOrDefault(v, Collections.emptySet()));
     }
 
     @Override
