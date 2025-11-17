@@ -120,6 +120,46 @@ public class Graph implements GraphInterface {
     }
 
     /**
+     * Returns the color assigned to the given node.
+     * If the node is uncolored or does not exist in the coloring map,
+     * this method returns -1.
+     *
+     * @param   v
+     *          The node whose color is requested.
+     *
+     * @return  The color assigned to the given node, or -1 if the node
+     *          is uncolored or not present in the coloring map.
+     *          | result == (colors.containsKey(v) ? colors.get(v) : -1)
+     */
+    @Override
+    public int getColor(int v) {
+        return colors.getOrDefault(v, -1);
+    }
+
+    /**
+     * Assigns a color to the given node.
+     *
+     * @param   v
+     *          The node to color
+     *
+     * @param   color
+     *          The color to assign
+     *
+     * @effect  The color of the given node v is updated in the coloring map to the given color.
+     *          | colors.get(v) == color
+     *
+     * @throws IllegalArgumentException
+     *          If the node does not exist in the graph
+     *          | !adjList.containsKey(v)
+     */
+    public void colorNode(int v, int color) {
+        if (!adjList.containsKey(v)) {
+            throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
+        }
+        colors.put(v, color);
+    }
+
+    /**
      * Remove the given node from the graph, along with all edges connected to it.
      * If the node does not exist, this method does nothing.
      *
@@ -269,7 +309,7 @@ public class Graph implements GraphInterface {
      *          If the given node does not exist in the adjacency list.
      *          | !adjList.containsKey(v)
      */
-    private int getSaturationDegree(int v) {
+    public int getSaturationDegree(int v) {
         if (!adjList.containsKey(v)) {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
@@ -280,23 +320,6 @@ public class Graph implements GraphInterface {
             if (c != -1) neighborColors.add(c);
         }
         return neighborColors.size();
-    }
-
-    /**
-     * Returns the color assigned to the given node.
-     * If the node is uncolored or does not exist in the coloring map,
-     * this method returns -1.
-     *
-     * @param   v
-     *          The node whose color is requested.
-     *
-     * @return  The color assigned to the given node, or -1 if the node
-     *          is uncolored or not present in the coloring map.
-     *          | result == (colors.containsKey(v) ? colors.get(v) : -1)
-     */
-    @Override
-    public int getColor(int v) {
-        return colors.getOrDefault(v, -1);
     }
 
     /**
