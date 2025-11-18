@@ -20,17 +20,6 @@ class GraphTest {
 
     // AUXILIARY METHODS
 
-    // Helper method to invoke private method getSaturationDegree
-    private int invokeGetSaturationDegree(int node) {
-        try {
-            var method = Graph.class.getDeclaredMethod("getSaturationDegree", int.class);
-            method.setAccessible(true);
-            return (int) method.invoke(graph, node);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     // Helper to create a temporary DIMACS file
     private Path createTempDIMACSFile(int n, int[][] edges) throws IOException {
         Path tempFile = Files.createTempFile("graph", ".col");
@@ -510,7 +499,7 @@ class GraphTest {
         // 1.6 Remove edge between two non-existing nodes
         assertThrows(IllegalArgumentException.class, () -> graph.removeEdge(999, 888));
         // Graph unchanged
-        assertEquals(graph.getNumberOfNodes(), 4);
+        assertEquals(4, graph.getNumberOfNodes());
         assertTrue(graph.getNodes().contains(1));
         assertTrue(graph.getNodes().contains(2));
         assertTrue(graph.getNodes().contains(4)); // Node 3 still exists even if fewer edges remain

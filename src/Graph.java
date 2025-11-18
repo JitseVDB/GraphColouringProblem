@@ -3,7 +3,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
 
-// TODO: Add safegaurd to ensure all graphs are valid.
+// TODO: Add safeguard to ensure all graphs are valid.
 // TODO: Ensure all functions handle incorrect input gracefully.
 
 /**
@@ -13,7 +13,7 @@ import java.util.*;
  * @version 1.0
  */
 public class Graph implements GraphInterface {
-    private final Map<Integer, Set<Integer>> adjList = new HashMap<>();
+    private final Map<Integer, BitSet> adjList = new HashMap<>();
     private final Map<Integer, Integer> colors = new HashMap<>();
     private int edgeCount = 0;
 
@@ -31,11 +31,12 @@ public class Graph implements GraphInterface {
             while ((line = br.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("c")) continue;
+
                 if (line.startsWith("p")) {
                     String[] parts = line.split("\\s+");
                     n = Integer.parseInt(parts[2]);
                     for (int i = 1; i <= n; i++) {
-                        adjList.put(i, new HashSet<>());
+                        adjList.put(i, new BitSet(n + 1)); // 1-based indexing
                         colors.put(i, -1); // -1 indicates uncolored
                     }
                 } else if (line.startsWith("e")) {
@@ -79,7 +80,7 @@ public class Graph implements GraphInterface {
      *          The node whose neighbors are requested.
      *
      * @return  A read-only collection containing all nodes adjacent to v, if v exists.
-     *          | result == adjList.containsKey(v)
+     *          | result != null && forall n in result: adjList.get(v).get(n)
      *
      * @throws  IllegalArgumentException
      *          If the node does not exist in the graph
@@ -91,7 +92,13 @@ public class Graph implements GraphInterface {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
 
-        return Collections.unmodifiableSet(adjList.getOrDefault(v, Collections.emptySet()));
+        BitSet neighborsBitSet = adjList.get(v);
+        Set<Integer> neighbors = new HashSet<>();
+        for (int i = neighborsBitSet.nextSetBit(1); i >= 0; i = neighborsBitSet.nextSetBit(i + 1)) {
+            neighbors.add(i);
+        }
+
+        return Collections.unmodifiableSet(neighbors);
     }
 
     /**
@@ -104,7 +111,7 @@ public class Graph implements GraphInterface {
      *          The second node you want to check.
      *
      * @return  True if the given nodes exist and are neighbors.
-     *          | result == (adjList.containsKey(u) && adjList.get(u).contains(v))
+     *          | result == (adjList.containsKey(u) && adjList.get(u).get(v))
      *
      * @throws  IllegalArgumentException
      *          If either u or v does not exist in the adjacency list.
@@ -118,7 +125,7 @@ public class Graph implements GraphInterface {
             );
         }
 
-        return adjList.getOrDefault(u, Collections.emptySet()).contains(v);
+        return adjList.get(u).get(v);
     }
 
     /**
@@ -128,7 +135,7 @@ public class Graph implements GraphInterface {
      *          The node whose degree is requested.
      *
      * @return  The number of neighbors of node v if the node v exists.
-     *          | result == (adjList.containsKey(v))
+     *          | result == (adjList..get(v).cardinality())
      *
      * @throws  IllegalArgumentException
      *          If the node does not exist in the graph
@@ -140,9 +147,9 @@ public class Graph implements GraphInterface {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
 
-        return adjList.getOrDefault(v, Collections.emptySet()).size();
+        BitSet neighbors = adjList.get(v);
+        return neighbors.cardinality();
     }
-
 
     /**
      * Returns the saturation degree of the given node.
@@ -156,10 +163,10 @@ public class Graph implements GraphInterface {
      *          Uncolored neighbors (with color -1) are ignored.
      *          | result ==
      *          |     (the number of distinct c such that
-     *          |         exists neighbor in adjList.get(v) :
-     *          |             colors.containsKey(neighbor) &&
-     *          |             colors.get(neighbor) != -1 &&
-     *          |             c == colors.get(neighbor))
+     *          |         exists neighbor i where adjList.get(v).get(i) == true :
+     *          |             colors.containsKey(i) &&
+     *          |             colors.get(i) != -1 &&
+     *          |             c == colors.get(i))
      *
      * @throws  IllegalArgumentException
      *          If the given node does not exist in the adjacency list.
@@ -170,11 +177,14 @@ public class Graph implements GraphInterface {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
 
+        BitSet neighbors = adjList.get(v);
+
         Set<Integer> neighborColors = new HashSet<>();
-        for (int neighbor : adjList.get(v)) {
-            int c = colors.getOrDefault(neighbor, -1);
+        for (int i = neighbors.nextSetBit(1); i >= 0; i = neighbors.nextSetBit(i + 1)) {
+            int c = colors.getOrDefault(i, -1);
             if (c != -1) neighborColors.add(c);
         }
+
         return neighborColors.size();
     }
 
@@ -242,17 +252,17 @@ public class Graph implements GraphInterface {
 
     /**
      * Remove the given node from the graph, along with all edges connected to it.
-     * If the node does not exist, this method does nothing.
+     * If the node does not exist, this method throws an exception.
      *
      * @param   v
      *          The node to remove.
      *
-     * @effect  For all neighbors u of the given node v, the node v is removed from
-     *          their adjacency sets, and the edge count is decreased by one for each
-     *          removed edge.
-     *          | for each u in adjList.get(v):
-     *          |     adjList.get(u).remove(v)
-     *          | edgeCount == old(edgeCount) - adjList.get(v).size()
+     * @effect  For all neighbors u of the given node v (stored as set bits in a BitSet),
+     *          the bit corresponding to v is cleared in u's adjacency BitSet, and the
+     *          edge count is decreased by one for each removed edge.
+     *          | for each u in adjList.get(v).nextSetBit(1..):
+     *          |     adjList.get(u).clear(v)
+     *          | edgeCount == old(edgeCount) - adjList.get(v).cardinality()
      *
      * @effect  The given node is removed from the adjacency list.
      *          | !adjList.containsKey(v)
@@ -270,10 +280,16 @@ public class Graph implements GraphInterface {
             throw new IllegalArgumentException(
                     "The node must exist in order to remove it: v=" + v
             );
-        for (int neighbor : adjList.get(v)) {
-            adjList.get(neighbor).remove(v);
+
+        BitSet neighbors = adjList.get(v);
+
+        // Remove v from all neighbors
+        for (int u = neighbors.nextSetBit(1); u >= 0; u = neighbors.nextSetBit(u + 1)) {
+            adjList.get(u).clear(v);
             edgeCount--;
         }
+
+        // Remove v itself
         adjList.remove(v);
         colors.remove(v);
     }
@@ -288,13 +304,13 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The other endpoint of the edge.
      *
-     * @effect  The node v is added to the adjacency set of u, and
-     *          the node u is added to the adjacency set of v.
-     *          | adjList.get(u).contains(v)
-     *          | adjList.get(v).contains(u)
+     * @effect  The node v is added to the adjacency BitSet of u, and
+     *          the node u is added to the adjacency BitSet of v.
+     *          | adjList.get(u).get(v) == true
+     *          | adjList.get(v).get(u) == true
      *
      * @effect  The edge count is increased by one if the edge did not already exist.
-     *          | if (!old(adjList.get(u)).contains(v))
+     *          | if (!old(adjList.get(u)).get(v))
      *          |     then edgeCount == old(edgeCount) + 1
      *          | else
      *          |     edgeCount == old(edgeCount)
@@ -310,8 +326,10 @@ public class Graph implements GraphInterface {
             );
         }
 
-        if (adjList.get(u).add(v)) {
-            adjList.get(v).add(u);
+        // Only increment edgeCount if this edge does not exist yet
+        if (!adjList.get(u).get(v)) {
+            adjList.get(u).set(v);
+            adjList.get(v).set(u);
             edgeCount++;
         }
     }
@@ -325,15 +343,14 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The other endpoint of the edge.
      *
-     * @effect  If there exists an edge between u and v, then v is removed from the
-     *          adjacency set of u, and u is removed from the adjacency set of v.
-     *          | if ((adjList.containsKey(u) && adjList.get(u).contains(v)) ||
-     *          | (adjList.containsKey(v) && adjList.get(v).contains(u)))
-     *          |    then adjList.get(u).remove(v) &&
-     *          |         adjList.get(v).remove(u)
+     * @effect  If there exists an edge between u and v (represented by set bits in the BitSets),
+     *          then the bits are cleared in both adjacency BitSets.
+     *          | if (adjList.get(u).get(v))
+     *          |     then adjList.get(u).clear(v) &&
+     *          |          adjList.get(v).clear(u)
      *
      * @effect  The edge count is decreased by one if the edge (u, v) existed.
-     *          | if (old(adjList.get(u)).contains(v))
+     *          | if (old(adjList.get(u)).get(v))
      *          |     then edgeCount == old(edgeCount) - 1
      *          | else
      *          |     edgeCount == old(edgeCount)
@@ -343,8 +360,8 @@ public class Graph implements GraphInterface {
      *          | !adjList.containsKey(u) || !adjList.containsKey(v)
      *
      * @throws  IllegalArgumentException
-     *          If either u or v does not contain the other node within its neighbours.
-     *          | !adjList.get(u).contains(v) || !adjList.get(v).contains(u)
+     *          If there is no edge between u and v.
+     *          | !adjList.get(u).get(v) || !adjList.get(v).get(u)
      */
     @Override
     public void removeEdge(int u, int v) {
@@ -353,20 +370,45 @@ public class Graph implements GraphInterface {
                     "Both nodes must exist before removing an edge: u=" + u + ", v=" + v
             );
         }
-        if (!adjList.get(u).contains(v) || !adjList.get(v).contains(u)) {
+        if (!adjList.get(u).get(v) || !adjList.get(v).get(u)) {
             throw new IllegalArgumentException(
                     "The given edge does not exist: u=" + u + ", v=" + v
             );
         }
 
-        if (adjList.getOrDefault(u, Collections.emptySet()).remove(v)) edgeCount--;
-        adjList.getOrDefault(v, Collections.emptySet()).remove(u);
+        adjList.get(u).clear(v);
+        adjList.get(v).clear(u);
+        edgeCount--;
     }
 
     @Override
     public void applyReduction() {
-        // Placeholder
+        // Determine the threshold: largest known clique or k for k-coloring
+        int threshold = bitBoardMaxClique();
+
+        // Collect nodes to remove
+        List<Integer> toRemove = new ArrayList<>();
+        for (int node : adjList.keySet()) {
+            if (getDegree(node) < threshold) {
+                toRemove.add(node);
+            }
+        }
+
+        // Remove nodes safely
+        for (int node : toRemove) {
+            removeNode(node);
+        }
     }
+
+    /**
+     * Placeholder method to determine the lower bound of the largest clique.
+     * You can replace this with a real clique-finding or estimation algorithm,
+     * or just return a fixed k for k-coloring.
+     */
+    private int bitBoardMaxClique() {
+        return 1;
+    }
+
 
     @Override
     public void applyConstructionHeuristic() {
