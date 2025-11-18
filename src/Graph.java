@@ -422,10 +422,10 @@ public class Graph implements GraphInterface {
      *
      * @throws  IllegalArgumentException
      *          If either u or v does not exist or is inactive.
-     *          | u < 0 || u >= verticeCount || v < 0 || v >= verticeCount || !active.get(u) || !active.get(v)
+     *          | u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(u) || !active.get(v)
      */
     private void addEdge(int u, int v) {
-        if (u < 0 || u >= verticeCount || v < 0 || v >= verticeCount || !active.get(u) || !active.get(v)) {
+        if (u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(u) || !active.get(v)) {
             throw new IllegalArgumentException(
                     "Both nodes must exist and be active before adding an edge: u=" + u + ", v=" + v
             );
@@ -444,24 +444,32 @@ public class Graph implements GraphInterface {
     /**
      * Remove the edge between the given nodes u and v, if it exists.
      *
-     * @param u One endpoint of the edge (0-based).
-     * @param v The other endpoint of the edge (0-based).
-     * @throws IllegalArgumentException If either u or v does not exist or is inactive.
-     *                                  | u < 0 || u >= verticeCount || v < 0 || v >= verticeCount || !active.get(u) || !active.get(v)
-     * @throws IllegalArgumentException If there is no edge between u and v.
-     *                                  | !adj[u].get(v) || !adj[v].get(u)
-     * @effect If there exists an edge between u and v (represented in the adjacency BitSets),
-     * the bits are cleared in both adjacency BitSets, and degrees and edgeCount are updated.
-     * | if (adj[u].get(v))
-     * |     then adj[u].get(v) == false &&
-     * |          adj[v].get(u) == false &&
-     * |          degree[u] == old(degree[u]) - 1 &&
-     * |          degree[v] == old(degree[v]) - 1 &&
-     * |          edgeCount == old(edgeCount) - 1
+     * @param   u
+     *          One endpoint of the edge (0-based).
+     *
+     * @param   v
+     *          The other endpoint of the edge (0-based).
+     *
+     * @effect  If there exists an edge between u and v (represented in the adjacency BitSets),
+     *          the bits are cleared in both adjacency BitSets, and degrees and edgeCount are updated.
+     *          | if (adj[u].get(v))
+     *          |     then adj[u].get(v) == false &&
+     *          |          adj[v].get(u) == false &&
+     *          |          degree[u] == old(degree[u]) - 1 &&
+     *          |          degree[v] == old(degree[v]) - 1 &&
+     *          |          edgeCount == old(edgeCount) - 1
+     *
+     * @throws  IllegalArgumentException
+     *          If either u or v does not exist or is inactive.
+     *          | u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(u) || !active.get(v)
+     *
+     * @throws  IllegalArgumentException
+     *          If there is no edge between u and v.
+     *          | !adj[u].get(v) || !adj[v].get(u)
      */
     @Override
     public void removeEdge(int u, int v) {
-        if (u < 0 || u >= verticeCount || v < 0 || v >= verticeCount || !active.get(u) || !active.get(v)) {
+        if (u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(u) || !active.get(v)) {
             throw new IllegalArgumentException(
                     "Both nodes must exist and be active before removing an edge: u=" + u + ", v=" + v
             );
@@ -525,7 +533,7 @@ public class Graph implements GraphInterface {
         if (verticeCount == 0) return;
 
         BitSet uncolored = (BitSet) active.clone();
-        int[] adjToBCount = new int[verticeCount]; // buffer for RLF scoring
+        int[] adjToBCount = new int[totalVertices]; // buffer for RLF scoring
         int currentColor = 0;
 
         while (!uncolored.isEmpty()) {
@@ -540,7 +548,7 @@ public class Graph implements GraphInterface {
             }
 
             // Create a new color class and mark seed as colored
-            BitSet C = new BitSet(verticeCount);
+            BitSet C = new BitSet(totalVertices);
             C.set(seed);
             uncolored.clear(seed);
             color[seed] = currentColor;

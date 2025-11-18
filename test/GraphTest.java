@@ -395,81 +395,63 @@ class GraphTest {
         assertEquals(0, graph.getNumberOfEdges());
     }
 
-
     @Test
     void testRemoveEdge() throws IOException {
-        // 1. Regular Graph
-        // Create a temporary graph with 4 nodes and 4 edges: 1-2, 2-3, 2-4, 3-4
+        // Create a temporary graph with 4 nodes and edges: 1-2, 2-3, 2-4, 3-4
         Path file = createTempDIMACSFile(4, new int[][]{
                 {1, 2}, {2, 3}, {2, 4}, {3, 4}
         });
-        graph.loadDIMACS(file.toString());
+        graph.loadDIMACS(file.toString()); // internally converts to 0-based
 
         assertEquals(4, graph.getNumberOfNodes());
         assertEquals(4, graph.getNumberOfEdges());
 
-        // 1.1 Remove existing edge (2,3)
+        // Remove edge 1-2 (0-based: 0-1)
         int oldEdgeCount = graph.getNumberOfEdges();
-        graph.removeEdge(2, 3);
-        // 1.1.1 Effect on nodes of removed edge
-        assertFalse(graph.getNeighborsOf(2).contains(3));
-        assertFalse(graph.getNeighborsOf(3).contains(2));
-        // 1.1.2 Effect on edge count
-        assertEquals(oldEdgeCount - 1, graph.getNumberOfEdges());
-        // Other edges remain untouched
-        assertTrue(graph.areNeighbors(1, 2));
-        assertTrue(graph.areNeighbors(2, 4));
-        assertTrue(graph.areNeighbors(3, 4));
-
-        // 1.2 Remove existing edge (3,4)
-        oldEdgeCount = graph.getNumberOfEdges();
-        graph.removeEdge(3, 4);
-        // 1.2.1 Effect on nodes of removed edge
-        assertFalse(graph.getNeighborsOf(3).contains(4));
-        assertFalse(graph.getNeighborsOf(4).contains(3));
-        // 1.2.2 Effect on edge count
-        assertEquals(oldEdgeCount - 1, graph.getNumberOfEdges());
-        // Other edges remain untouched
-        assertTrue(graph.areNeighbors(1, 2));
-        assertTrue(graph.areNeighbors(2, 4));
-        assertFalse(graph.areNeighbors(2, 3)); // removed earlier
-
-        // 1.3 Remove non-existent edge between existing nodes (1,3)
-        assertFalse(graph.areNeighbors(1, 3));
-        int unchangedEdgeCount = graph.getNumberOfEdges();
-        assertThrows(IllegalArgumentException.class, () -> graph.removeEdge(1, 3));
-        // Graph must remain unchanged
-        assertEquals(unchangedEdgeCount, graph.getNumberOfEdges());
-        assertFalse(graph.areNeighbors(1, 3));
-
-        // 1.4 Remove edge where one of the nodes does not exist
-        // Case u exists, v does NOT exist
-        assertThrows(IllegalArgumentException.class, () -> graph.removeEdge(1, 999));
-        // Case u does NOT exist, v exists
-        assertThrows(IllegalArgumentException.class, () -> graph.removeEdge(999, 2));
-        // Graph unchanged
-        assertEquals(unchangedEdgeCount, graph.getNumberOfEdges());
-
-        // 1.5 Remove existing edge leaving a node isolated (1,2)
-        oldEdgeCount = graph.getNumberOfEdges();
-        assertTrue(graph.areNeighbors(1, 2));
-        graph.removeEdge(1, 2);
-        // 1.5.1 Effect on nodes of removed edge
+        graph.removeEdge(1, 2); // 1-based from file converted to 0-based in graph
         assertFalse(graph.getNeighborsOf(1).contains(2));
         assertFalse(graph.getNeighborsOf(2).contains(1));
-        // 1.5.2 Effect on edge count
         assertEquals(oldEdgeCount - 1, graph.getNumberOfEdges());
-        // Node 1 is isolated but still exists
-        assertTrue(graph.getNodes().contains(1));
-        assertEquals(0, graph.getNeighborsOf(1).size());
+        assertTrue(graph.areNeighbors(0, 1));
+        assertTrue(graph.areNeighbors(1, 3));
+        assertTrue(graph.areNeighbors(2, 3));
 
-        // 1.6 Remove edge between two non-existing nodes
+        // Remove edge 2-3 (0-based: 1-2)
+        oldEdgeCount = graph.getNumberOfEdges();
+        graph.removeEdge(2, 3);
+        assertFalse(graph.getNeighborsOf(2).contains(3));
+        assertFalse(graph.getNeighborsOf(3).contains(2));
+        assertEquals(oldEdgeCount - 1, graph.getNumberOfEdges());
+        assertTrue(graph.areNeighbors(0, 1));
+        assertTrue(graph.areNeighbors(1, 3));
+        assertFalse(graph.areNeighbors(1, 2));
+
+        // Remove non-existent edge
+        assertFalse(graph.areNeighbors(0, 2));
+        int unchangedEdgeCount = graph.getNumberOfEdges();
+        assertThrows(IllegalArgumentException.class, () -> graph.removeEdge(0, 2));
+        assertEquals(unchangedEdgeCount, graph.getNumberOfEdges());
+
+        // Remove edge with non-existent node
+        assertThrows(IllegalArgumentException.class, () -> graph.removeEdge(0, 999));
+        assertThrows(IllegalArgumentException.class, () -> graph.removeEdge(999, 1));
+        assertEquals(unchangedEdgeCount, graph.getNumberOfEdges());
+
+        // Remove edge leaving a node isolated
+        oldEdgeCount = graph.getNumberOfEdges();
+        graph.removeEdge(0, 1);
+        assertFalse(graph.getNeighborsOf(0).contains(1));
+        assertFalse(graph.getNeighborsOf(1).contains(0));
+        assertEquals(oldEdgeCount - 1, graph.getNumberOfEdges());
+        assertTrue(graph.getNodes().contains(0));
+        assertEquals(0, graph.getNeighborsOf(0).size());
+
+        // Remove edge between two non-existent nodes
         assertThrows(IllegalArgumentException.class, () -> graph.removeEdge(999, 888));
-        // Graph unchanged
         assertEquals(4, graph.getNumberOfNodes());
+        assertTrue(graph.getNodes().contains(0));
         assertTrue(graph.getNodes().contains(1));
-        assertTrue(graph.getNodes().contains(2));
-        assertTrue(graph.getNodes().contains(4)); // Node 3 still exists even if fewer edges remain
+        assertTrue(graph.getNodes().contains(3));
     }
 
     @Test
@@ -558,18 +540,18 @@ class GraphTest {
 
         // 1.1 Verify correct nodes were removed
         assertEquals(1, graph.getNumberOfNodes());
-        assertTrue(graph.getNodes().contains(4));
+        assertTrue(graph.getNodes().contains(3));
 
         // Verify others are gone
+        assertFalse(graph.getNodes().contains(0));
         assertFalse(graph.getNodes().contains(1));
         assertFalse(graph.getNodes().contains(2));
-        assertFalse(graph.getNodes().contains(3));
+        assertFalse(graph.getNodes().contains(4));
         assertFalse(graph.getNodes().contains(5));
-        assertFalse(graph.getNodes().contains(6));
 
-        // 1.2 Verify edges were cleaned up (Node 4 is now isolated in the reduced graph)
+        // 1.2 Verify edges were cleaned up (Node 3 is now isolated in the reduced graph)
         assertEquals(0, graph.getNumberOfEdges());
-        assertEquals(0, graph.getDegree(4));
+        assertEquals(0, graph.getDegree(3));
 
 
         // 2. Stability Scenario: No nodes should be removed
@@ -593,10 +575,10 @@ class GraphTest {
         // 2.1 Verify nothing changed
         assertEquals(4, graph.getNumberOfNodes());
         assertEquals(4, graph.getNumberOfEdges());
+        assertTrue(graph.getNodes().contains(0));
         assertTrue(graph.getNodes().contains(1));
         assertTrue(graph.getNodes().contains(2));
         assertTrue(graph.getNodes().contains(3));
-        assertTrue(graph.getNodes().contains(4));
 
 
         // 3. Empty Graph Scenario
