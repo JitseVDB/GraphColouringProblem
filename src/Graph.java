@@ -502,4 +502,12 @@ public class Graph implements GraphInterface {
     public void applyStochasticLocalSearchAlgorithm() {
         // Placeholder
     }
+
+    // Helper methods to allow GraphVisualizer acces to internal representation graph
+    public Map<Integer, BitSet> getAdjListCopy() {
+        return new HashMap<>(this.adjList);
+    }
+    public Map<Integer, Integer> getColorsCopy() {
+        return new HashMap<>(this.colors);
+    }
 }
