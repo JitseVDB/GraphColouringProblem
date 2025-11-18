@@ -57,14 +57,6 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns the number of edges.
-     */
-    @Override
-    public int getNumberOfEdges() {
-        return edgeCount;
-    }
-
-    /**
      * Returns the numbers of nodes.
      */
     @Override
@@ -73,18 +65,11 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns the degree of the given node.
-     * If the node does not exist, returns 0.
-     *
-     * @param   v
-     *          The node whose degree is requested.
-     *
-     * @return  The number of neighbors of node v.
-     *          | result == (adjList.containsKey(v) ? adjList.get(v).size() : 0)
+     * Returns the number of edges.
      */
     @Override
-    public int getDegree(int v) {
-        return adjList.getOrDefault(v, Collections.emptySet()).size();
+    public int getNumberOfEdges() {
+        return edgeCount;
     }
 
     /**
@@ -93,12 +78,19 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The node whose neighbors are requested.
      *
-     * @return  A read-only collection containing all nodes adjacent to v.
-     *          If the node does not exist, an empty collection is returned.
-     *          | result == adjList.containsKey(v) ? adjList.get(v) : Collections.emptySet()
+     * @return  A read-only collection containing all nodes adjacent to v, if v exists.
+     *          | result == adjList.containsKey(v)
+     *
+     * @throws  IllegalArgumentException
+     *          If the node does not exist in the graph
+     *          | !adjList.containsKey(v)
      */
     @Override
     public Collection<Integer> getNeighborsOf(int v) {
+        if (!adjList.containsKey(v)) {
+            throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
+        }
+
         return Collections.unmodifiableSet(adjList.getOrDefault(v, Collections.emptySet()));
     }
 
@@ -111,12 +103,79 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The second node you want to check.
      *
-     * @return  True if the nodes has are neighbors.
+     * @return  True if the given nodes exist and are neighbors.
      *          | result == (adjList.containsKey(u) && adjList.get(u).contains(v))
+     *
+     * @throws  IllegalArgumentException
+     *          If either u or v does not exist in the adjacency list.
+     *          | !adjList.containsKey(u) || !adjList.containsKey(v)
      */
     @Override
     public boolean areNeighbors(int u, int v) {
+        if (!adjList.containsKey(u) || !adjList.containsKey(v)) {
+            throw new IllegalArgumentException(
+                    "Both nodes must exist before adding an edge: u=" + u + ", v=" + v
+            );
+        }
+
         return adjList.getOrDefault(u, Collections.emptySet()).contains(v);
+    }
+
+    /**
+     * Returns the degree of the given node.
+     *
+     * @param   v
+     *          The node whose degree is requested.
+     *
+     * @return  The number of neighbors of node v if the node v exists.
+     *          | result == (adjList.containsKey(v))
+     *
+     * @throws  IllegalArgumentException
+     *          If the node does not exist in the graph
+     *          | !adjList.containsKey(v)
+     */
+    @Override
+    public int getDegree(int v) {
+        if (!adjList.containsKey(v)) {
+            throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
+        }
+
+        return adjList.getOrDefault(v, Collections.emptySet()).size();
+    }
+
+
+    /**
+     * Returns the saturation degree of the given node.
+     * The saturation degree is defined as the number of distinct colors
+     * assigned to the neighbors of that node.
+     *
+     * @param   v
+     *          The node whose saturation degree is to be computed.
+     *
+     * @return  The number of unique colors among all colored neighbors of the given node.
+     *          Uncolored neighbors (with color -1) are ignored.
+     *          | result ==
+     *          |     (the number of distinct c such that
+     *          |         exists neighbor in adjList.get(v) :
+     *          |             colors.containsKey(neighbor) &&
+     *          |             colors.get(neighbor) != -1 &&
+     *          |             c == colors.get(neighbor))
+     *
+     * @throws  IllegalArgumentException
+     *          If the given node does not exist in the adjacency list.
+     *          | !adjList.containsKey(v)
+     */
+    public int getSaturationDegree(int v) {
+        if (!adjList.containsKey(v)) {
+            throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
+        }
+
+        Set<Integer> neighborColors = new HashSet<>();
+        for (int neighbor : adjList.get(v)) {
+            int c = colors.getOrDefault(neighbor, -1);
+            if (c != -1) neighborColors.add(c);
+        }
+        return neighborColors.size();
     }
 
     /**
@@ -128,11 +187,19 @@ public class Graph implements GraphInterface {
      *          The node whose color is requested.
      *
      * @return  The color assigned to the given node, or -1 if the node
-     *          is uncolored or not present in the coloring map.
+     *          is uncolored.
      *          | result == (colors.containsKey(v) ? colors.get(v) : -1)
+     *
+     * @throws  IllegalArgumentException
+     *          If the node does not exist in the graph
+     *          | !adjList.containsKey(v)
      */
     @Override
     public int getColor(int v) {
+        if (!adjList.containsKey(v)) {
+            throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
+        }
+
         return colors.getOrDefault(v, -1);
     }
 
@@ -157,6 +224,20 @@ public class Graph implements GraphInterface {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
         colors.put(v, color);
+    }
+
+    /**
+     * Resets the coloring of all nodes in the graph.
+     * After this operation, all nodes are considered uncolored.
+     *
+     * @effect  For every node u in the adjacency list, its color is set to -1.
+     *          | for each u in adjList.keySet():
+     *          |     colors.get(u) == -1
+     */
+    public void resetColors() {
+        for (int node : adjList.keySet()) {
+            colors.put(node, -1);
+        }
     }
 
     /**
@@ -187,7 +268,7 @@ public class Graph implements GraphInterface {
     public void removeNode(int v) {
         if (!adjList.containsKey(v))
             throw new IllegalArgumentException(
-                    "Both nodes must exist in order to remove it: v=" + v
+                    "The node must exist in order to remove it: v=" + v
             );
         for (int neighbor : adjList.get(v)) {
             adjList.get(neighbor).remove(v);
@@ -237,10 +318,10 @@ public class Graph implements GraphInterface {
 
     /**
      * Remove the edge between the given nodes u and v, if it exists.
-     * If no such edge exists, this method does nothing.
      *
      * @param   u
      *          One endpoint of the edge.
+     *
      * @param   v
      *          The other endpoint of the edge.
      *
@@ -260,12 +341,21 @@ public class Graph implements GraphInterface {
      * @throws  IllegalArgumentException
      *          If either u or v does not exist in the adjacency list.
      *          | !adjList.containsKey(u) || !adjList.containsKey(v)
+     *
+     * @throws  IllegalArgumentException
+     *          If either u or v does not contain the other node within its neighbours.
+     *          | !adjList.get(u).contains(v) || !adjList.get(v).contains(u)
      */
     @Override
     public void removeEdge(int u, int v) {
         if (!adjList.containsKey(u) || !adjList.containsKey(v)) {
             throw new IllegalArgumentException(
                     "Both nodes must exist before removing an edge: u=" + u + ", v=" + v
+            );
+        }
+        if (!adjList.get(u).contains(v) || !adjList.get(v).contains(u)) {
+            throw new IllegalArgumentException(
+                    "The given edge does not exist: u=" + u + ", v=" + v
             );
         }
 
@@ -286,53 +376,5 @@ public class Graph implements GraphInterface {
     @Override
     public void applyStochasticLocalSearchAlgorithm() {
         // Placeholder
-    }
-
-    /**
-     * Returns the saturation degree of the given node.
-     * The saturation degree is defined as the number of distinct colors
-     * assigned to the neighbors of that node.
-     *
-     * @param   v
-     *          The node whose saturation degree is to be computed.
-     *
-     * @return  The number of unique colors among all colored neighbors of the given node.
-     *          Uncolored neighbors (with color -1) are ignored.
-     *          | result ==
-     *          |     (the number of distinct c such that
-     *          |         exists neighbor in adjList.get(v) :
-     *          |             colors.containsKey(neighbor) &&
-     *          |             colors.get(neighbor) != -1 &&
-     *          |             c == colors.get(neighbor))
-     *
-     * @throws  IllegalArgumentException
-     *          If the given node does not exist in the adjacency list.
-     *          | !adjList.containsKey(v)
-     */
-    public int getSaturationDegree(int v) {
-        if (!adjList.containsKey(v)) {
-            throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
-        }
-
-        Set<Integer> neighborColors = new HashSet<>();
-        for (int neighbor : adjList.get(v)) {
-            int c = colors.getOrDefault(neighbor, -1);
-            if (c != -1) neighborColors.add(c);
-        }
-        return neighborColors.size();
-    }
-
-    /**
-     * Resets the coloring of all nodes in the graph.
-     * After this operation, all nodes are considered uncolored.
-     *
-     * @effect  For every node u in the adjacency list, its color is set to -1.
-     *          | for each u in adjList.keySet():
-     *          |     colors.get(u) == -1
-     */
-    public void resetColors() {
-        for (int node : adjList.keySet()) {
-            colors.put(node, -1);
-        }
     }
 }
