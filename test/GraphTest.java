@@ -506,7 +506,7 @@ class GraphTest {
     }
 
     @Test
-    void testBitBoardMaxClique() throws IOException {
+    void testGetMaxClique() throws IOException {
         // 1. Simple triangle (3-clique)
         // Graph: 1-2, 2-3, 1-3
         Path triangle = createTempDIMACSFile(3, new int[][]{
@@ -555,5 +555,89 @@ class GraphTest {
         assertEquals(0, graph.getMaxClique());
     }
 
+    @Test
+    void testApplyReduction() throws IOException {
+        // 1. Reduction Scenario: Clique of 4 with a Tail
+        // Graph Structure:
+        // - Clique (Nodes 1, 2, 3, 4) -> Max Clique size = 4
+        // - Tail connected to Node 4: 4-5, 5-6
+        //
+        // Degrees:
+        // Node 1: 3 (neighbors 2,3,4)      -> 3 < 4 -> REMOVE
+        // Node 2: 3 (neighbors 1,3,4)      -> 3 < 4 -> REMOVE
+        // Node 3: 3 (neighbors 1,2,4)      -> 3 < 4 -> REMOVE
+        // Node 4: 4 (neighbors 1,2,3,5)    -> 4 == 4 -> KEEP
+        // Node 5: 2 (neighbors 4,6)        -> 2 < 4 -> REMOVE
+        // Node 6: 1 (neighbors 5)          -> 1 < 4 -> REMOVE
 
+        int[][] edges = {
+                // Clique 1-2-3-4
+                {1, 2}, {1, 3}, {1, 4},
+                {2, 3}, {2, 4},
+                {3, 4},
+                // Tail 4-5-6
+                {4, 5}, {5, 6}
+        };
+
+        Path file = createTempDIMACSFile(6, edges);
+        graph.loadDIMACS(file.toString());
+
+        // Pre-check: Ensure setup is correct
+        assertEquals(6, graph.getNumberOfNodes());
+        assertEquals(4, graph.getMaxClique()); // Threshold should be 4
+
+        // Apply Reduction
+        graph.applyReduction();
+
+        // 1.1 Verify correct nodes were removed
+        assertEquals(1, graph.getNumberOfNodes());
+        assertTrue(graph.getNodes().contains(4));
+
+        // Verify others are gone
+        assertFalse(graph.getNodes().contains(1));
+        assertFalse(graph.getNodes().contains(2));
+        assertFalse(graph.getNodes().contains(3));
+        assertFalse(graph.getNodes().contains(5));
+        assertFalse(graph.getNodes().contains(6));
+
+        // 1.2 Verify edges were cleaned up (Node 4 is now isolated in the reduced graph)
+        assertEquals(0, graph.getNumberOfEdges());
+        assertEquals(0, graph.getDegree(4));
+
+
+        // 2. Stability Scenario: No nodes should be removed
+        // Graph: A simple square (Cycle of 4)
+        // 1-2, 2-3, 3-4, 4-1
+        // Max Clique = 2 (any edge)
+        // All degrees = 2
+        // Condition: degree < 2? False. Keep all.
+        Path square = createTempDIMACSFile(4, new int[][]{
+                {1, 2}, {2, 3}, {3, 4}, {4, 1}
+        });
+        graph.loadDIMACS(square.toString());
+
+        // Pre-check
+        assertEquals(2, graph.getMaxClique());
+        assertEquals(4, graph.getNumberOfNodes());
+
+        // Apply Reduction
+        graph.applyReduction();
+
+        // 2.1 Verify nothing changed
+        assertEquals(4, graph.getNumberOfNodes());
+        assertEquals(4, graph.getNumberOfEdges());
+        assertTrue(graph.getNodes().contains(1));
+        assertTrue(graph.getNodes().contains(2));
+        assertTrue(graph.getNodes().contains(3));
+        assertTrue(graph.getNodes().contains(4));
+
+
+        // 3. Empty Graph Scenario
+        Path empty = createTempDIMACSFile(0, new int[][]{});
+        graph.loadDIMACS(empty.toString());
+
+        // Should not throw exception
+        assertDoesNotThrow(() -> graph.applyReduction());
+        assertEquals(0, graph.getNumberOfNodes());
+    }
 }
