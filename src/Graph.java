@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.util.*;
 
 // TODO: Add safeguard to ensure all graphs are valid.
-// TODO: Ensure all functions handle incorrect input gracefully.
+// TODO: In reduction I assume we should keep track of nodes and edges to restore later.
 
 /**
  * A class representing graphs.
@@ -251,6 +251,99 @@ public class Graph implements GraphInterface {
     }
 
     /**
+     * Computes the size of the maximum clique using a BitBoard Max Clique (BBMC) approach.
+     *
+     * @return the size of the maximum clique found in the graph
+     */
+    public int getMaxClique() {
+        int n = adjList.size();
+        if (n == 0) return 0;
+
+        // Convert adjacency to 0-based BitSet array (adjBits) for efficient bitwise operations.
+        BitSet[] adjBits = new BitSet[n];
+        for (int i = 0; i < n; i++) {
+            adjBits[i] = new BitSet(n);
+            int node = i + 1;
+            BitSet neighbors = adjList.get(node);
+            // Map 1-based node IDs from adjList to 0-based array indices.
+            for (int neighbor = neighbors.nextSetBit(1); neighbor >= 0; neighbor = neighbors.nextSetBit(neighbor + 1)) {
+                adjBits[i].set(neighbor - 1);
+            }
+        }
+
+        // Recursive BBMC solver class.
+        class BitBoardMaxClique {
+            int maxCliqueSize = 0;
+
+            /**
+             * Recursively expands a candidate set to find the maximum clique.
+             * This is the core of the Bron-Kerbosch algorithm with pivoting.
+             *
+             * @param   clique
+             * The current clique represented as a BitSet of 0-based node indices.
+             *
+             * @param   candidates
+             * The set of nodes that can potentially be added to the current clique.
+             *
+             * @effect  Updates the maximum clique size found so far (maxCliqueSize) if the
+             * current clique is larger than the previous maximum.
+             * | if candidates.isEmpty()
+             * |       then maxCliqueSize == max(maxCliqueSize, clique.cardinality())
+             */
+            void expand(BitSet clique, BitSet candidates) {
+                // Base Case: If no more candidates, update max clique size.
+                if (candidates.isEmpty()) {
+                    maxCliqueSize = Math.max(maxCliqueSize, clique.cardinality());
+                    return;
+                }
+
+                // Pivot Selection: Find the node (pivot) in candidates with the maximum degree.
+                int pivot = -1;
+                int maxDegree = -1;
+                for (int v = candidates.nextSetBit(0); v >= 0; v = candidates.nextSetBit(v + 1)) {
+                    // Calculate degree of node v.
+                    int degree = adjBits[v].cardinality();
+                    if (degree > maxDegree) {
+                        maxDegree = degree;
+                        pivot = v;
+                    }
+                }
+
+                // Pruning: Determine the set of candidates (ext) not connected to the pivot.
+                BitSet ext = (BitSet) candidates.clone();
+                ext.andNot(adjBits[pivot]);
+
+                // Iterate over the reduced candidate set (ext) to start new branches.
+                for (int v = ext.nextSetBit(0); v >= 0; v = ext.nextSetBit(v + 1)) {
+                    // Add the current node 'v' to the current clique.
+                    clique.set(v);
+
+                    // New candidates are the intersection of current candidates and neighbors of 'v'.
+                    BitSet newCandidates = (BitSet) candidates.clone();
+                    newCandidates.and(adjBits[v]);
+
+                    // Recursive call with the expanded clique and new candidates.
+                    expand(clique, newCandidates);
+
+                    // Backtrack: Remove 'v' from clique and candidates set.
+                    clique.clear(v);
+                    candidates.clear(v);
+                }
+            }
+        }
+
+        // Initialize the solver and start the search with an empty clique and all nodes as candidates.
+        BitBoardMaxClique  solver = new BitBoardMaxClique();
+        BitSet emptyClique = new BitSet(n);
+        BitSet allNodes = new BitSet(n);
+        allNodes.set(0, n);
+        solver.expand(emptyClique, allNodes);
+
+        // Return the maximum clique size found.
+        return solver.maxCliqueSize;
+    }
+
+    /**
      * Remove the given node from the graph, along with all edges connected to it.
      * If the node does not exist, this method throws an exception.
      *
@@ -384,7 +477,7 @@ public class Graph implements GraphInterface {
     @Override
     public void applyReduction() {
         // Determine the threshold: largest known clique or k for k-coloring
-        int threshold = bitBoardMaxClique();
+        int threshold = getMaxClique();
 
         // Collect nodes to remove
         List<Integer> toRemove = new ArrayList<>();
@@ -399,16 +492,6 @@ public class Graph implements GraphInterface {
             removeNode(node);
         }
     }
-
-    /**
-     * Placeholder method to determine the lower bound of the largest clique.
-     * You can replace this with a real clique-finding or estimation algorithm,
-     * or just return a fixed k for k-coloring.
-     */
-    private int bitBoardMaxClique() {
-        return 1;
-    }
-
 
     @Override
     public void applyConstructionHeuristic() {

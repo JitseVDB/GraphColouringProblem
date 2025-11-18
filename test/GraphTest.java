@@ -505,4 +505,55 @@ class GraphTest {
         assertTrue(graph.getNodes().contains(4)); // Node 3 still exists even if fewer edges remain
     }
 
+    @Test
+    void testBitBoardMaxClique() throws IOException {
+        // 1. Simple triangle (3-clique)
+        // Graph: 1-2, 2-3, 1-3
+        Path triangle = createTempDIMACSFile(3, new int[][]{
+                {1, 2}, {2, 3}, {1, 3}
+        });
+        graph.loadDIMACS(triangle.toString());
+        assertEquals(3, graph.getMaxClique());
+
+        // 2. Line of 3 nodes (no triangle, max clique = 2)
+        // Graph: 1-2, 2-3
+        Path line = createTempDIMACSFile(3, new int[][]{
+                {1, 2}, {2, 3}
+        });
+        graph.loadDIMACS(line.toString());
+        assertEquals(2, graph.getMaxClique());
+
+        // 3. Square with a diagonal (max clique = 3)
+        // Graph: 1-2, 2-3, 3-4, 4-1, 1-3
+        Path squareDiag = createTempDIMACSFile(4, new int[][]{
+                {1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}
+        });
+        graph.loadDIMACS(squareDiag.toString());
+        assertEquals(3, graph.getMaxClique());
+
+        // 4. Disconnected nodes (max clique = 1)
+        // Graph: 1, 2, 3 (no edges)
+        Path disconnected = createTempDIMACSFile(3, new int[][]{});
+        graph.loadDIMACS(disconnected.toString());
+        assertEquals(1, graph.getMaxClique());
+
+        // 5. Complete graph of 5 nodes (max clique = 5)
+        int[][] edgesComplete5 = new int[10][2];
+        int index = 0;
+        for (int i = 1; i <= 5; i++) {
+            for (int j = i + 1; j <= 5; j++) {
+                edgesComplete5[index++] = new int[]{i, j};
+            }
+        }
+        Path complete5 = createTempDIMACSFile(5, edgesComplete5);
+        graph.loadDIMACS(complete5.toString());
+        assertEquals(5, graph.getMaxClique());
+
+        // 6. Empty graph
+        Path tempFileEmptyGraph = createTempDIMACSFile(0, new int[][]{});
+        graph.loadDIMACS(tempFileEmptyGraph.toString());
+        assertEquals(0, graph.getMaxClique());
+    }
+
+
 }
