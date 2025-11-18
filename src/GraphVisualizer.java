@@ -2,12 +2,13 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
-import java.util.Map;
 import java.util.BitSet;
+import java.util.HashMap;
+import java.util.Map;
 
 public class GraphVisualizer extends JPanel {
-    private final Map<Integer, BitSet> adjList;
-    private final Map<Integer, Integer> colors;
+    private final Map<Integer, BitSet> adjMap;
+    private final Map<Integer, Integer> colorMap;
     private final int[][] coordinates; // Stores x,y for every node
     private final int nodeRadius = 15;
 
@@ -18,15 +19,12 @@ public class GraphVisualizer extends JPanel {
             new Color(255, 179, 102), new Color(179, 255, 102), new Color(179, 102, 255)
     };
 
-    public GraphVisualizer(Map<Integer, BitSet> adjList, Map<Integer, Integer> colors) {
-        this.adjList = adjList;
-        this.colors = colors;
+    public GraphVisualizer(Map<Integer, BitSet> adjMap, Map<Integer, Integer> colorMap) {
+        this.adjMap = adjMap;
+        this.colorMap = colorMap;
 
         // 1. Calculate Layout (Circle Layout)
-        // Since we can't use physics libraries, we arrange nodes in a circle.
-        int n = 0;
-        for(int k : adjList.keySet()) n = Math.max(n, k); // Find max index
-
+        int n = adjMap.keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
         this.coordinates = new int[n + 1][2];
 
         int centerX = 400;
@@ -34,9 +32,9 @@ public class GraphVisualizer extends JPanel {
         int radius = 300;
 
         int index = 0;
-        int totalNodes = adjList.size();
+        int totalNodes = adjMap.size();
 
-        for (Integer node : adjList.keySet()) {
+        for (Integer node : adjMap.keySet()) {
             double angle = 2 * Math.PI * index / totalNodes;
             coordinates[node][0] = (int) (centerX + radius * Math.cos(angle));
             coordinates[node][1] = (int) (centerY + radius * Math.sin(angle));
@@ -58,11 +56,10 @@ public class GraphVisualizer extends JPanel {
         g2.setColor(new Color(200, 200, 200, 100)); // Light gray, semi-transparent
         g2.setStroke(new BasicStroke(1));
 
-        for (Integer u : adjList.keySet()) {
-            BitSet neighbors = adjList.get(u);
+        for (Integer u : adjMap.keySet()) {
+            BitSet neighbors = adjMap.get(u);
             for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
-                // Draw edge only if u < v to avoid duplicates, and ensure v is in graph
-                if (u < v && adjList.containsKey(v)) {
+                if (u < v && adjMap.containsKey(v)) {
                     g2.draw(new Line2D.Double(
                             coordinates[u][0], coordinates[u][1],
                             coordinates[v][0], coordinates[v][1]
@@ -72,12 +69,12 @@ public class GraphVisualizer extends JPanel {
         }
 
         // 2. Draw Nodes
-        for (Integer node : adjList.keySet()) {
+        for (Integer node : adjMap.keySet()) {
             int x = coordinates[node][0] - nodeRadius;
             int y = coordinates[node][1] - nodeRadius;
 
             // Determine Color
-            int cIndex = colors.getOrDefault(node, -1);
+            int cIndex = colorMap.getOrDefault(node, -1);
             if (cIndex == -1) {
                 g2.setColor(Color.WHITE);
             } else {
@@ -99,17 +96,21 @@ public class GraphVisualizer extends JPanel {
         }
     }
 
-    // Updated helper method to accept a Window Title
+    /**
+     * Displays a window with the current graph.
+     *
+     * @param graph Graph instance using updated internal structures
+     * @param title Title for the JFrame window
+     */
     public static void show(Graph graph, String title) {
-        JFrame frame = new JFrame("Graph: " + title); // Set title here
+        JFrame frame = new JFrame("Graph: " + title);
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
-        // Make sure your Graph class has these two methods!
-        GraphVisualizer panel = new GraphVisualizer(graph.getAdjListCopy(), graph.getColorsCopy());
+        GraphVisualizer panel = new GraphVisualizer(graph.getAdjCopy(), graph.getColorsCopy());
 
         frame.add(panel);
         frame.pack();
-        frame.setLocationRelativeTo(null); // Center on screen
+        frame.setLocationRelativeTo(null);
         frame.setVisible(true);
     }
 }
