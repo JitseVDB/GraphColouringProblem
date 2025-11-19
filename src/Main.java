@@ -8,8 +8,6 @@ public class Main {
 
     public static void main(String[] args) {
         String[] testFiles = {
-                "abb313GPIA.col",
-                "ash331GPIA.col",
                 "DSJC125.1.col"
         };
 
@@ -47,16 +45,16 @@ public class Main {
 
                 // STEP 2: APPLY REDUCTION
                 System.out.println("Applying reduction (removing nodes with degree < MaxClique)...");
-                long startTime = System.nanoTime();
+                long startTimerReduction = System.nanoTime();
                 g.applyReduction();
-                long duration = System.nanoTime() - startTime;
+                long durationReduction = System.nanoTime() - startTimerReduction;
 
-                int newNodeCount = g.getNumberOfNodes();
-                int newEdgeCount = g.getNumberOfEdges();
+                int newNodeCountReduction = g.getNumberOfNodes();
+                int newEdgeCountReduction = g.getNumberOfEdges();
 
-                System.out.println("Reduction complete in " + (duration / 1000000) + "ms.");
-                System.out.println("Removed " + (originalNodeCount - newNodeCount) + " nodes.");
-                System.out.println("Reduced Graph  -> Nodes: " + newNodeCount + ", Edges: " + newEdgeCount);
+                System.out.println("Reduction complete in " + (durationReduction / 1000000) + "ms.");
+                System.out.println("Removed " + (originalNodeCount - newNodeCountReduction) + " nodes.");
+                System.out.println("Reduced Graph  -> Nodes: " + newNodeCountReduction + ", Edges: " + newEdgeCountReduction);
 
                 // STEP 3: SHOW REDUCED GRAPH
                 GraphVisualizer.show(g, file + " [REDUCED]");
@@ -64,6 +62,22 @@ public class Main {
                 System.out.println(">> Reduced graph displayed.");
                 System.out.println(">> Press ENTER to load the next file...");
                 scanner.nextLine();
+
+                // STEP 4: APPLY CONSTRUCTION
+                System.out.println("Applying construction to generate a feasible coloring...");
+                long startTimeConstruction = System.nanoTime();
+                g.applyConstructionHeuristic();
+                long durationConstruction = System.nanoTime() - startTimeConstruction;
+
+                System.out.println("Construction complete in " + (durationReduction / 1000000) + "ms.");
+
+                // STEP 5: SHOW CONSTRUCTED COLORING
+                GraphVisualizer.show(g, file + " [FEASIBLE COLORING]");
+
+                System.out.println(">> Constructed graph coloring displayed.");
+                System.out.println(">> Press ENTER to load the next file...");
+                scanner.nextLine();
+
 
             } catch (IOException e) {
                 e.printStackTrace();

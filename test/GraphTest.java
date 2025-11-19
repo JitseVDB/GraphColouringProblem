@@ -109,6 +109,43 @@ class GraphTest {
     }
 
     @Test
+    void testGetNumberOfUsedColors() throws IOException {
+        // 1. Regular Graph
+        // Create a temporary graph with 3 nodes and 2 edges: 1-2, 2-3
+        Path tempFileGraph = createTempDIMACSFile(3, new int[][]{{1, 2}, {2, 3}});
+        graph.loadDIMACS(tempFileGraph.toString());
+
+        // Sanity check
+        assertEquals(2, graph.getNumberOfEdges());
+        assertEquals(3, graph.getNumberOfNodes());
+
+        // Color nodes
+        graph.colorNode(0,0);
+        graph.colorNode(1,1);
+        graph.colorNode(2,2);
+
+        // The graph should contain 3 unique colors.
+        assertEquals(3,  graph.getNumberOfUsedColors());
+
+        // Recolor nodes with duplicate colors
+        graph.colorNode(0,1);
+
+        // The graph should contain 2 unique colors.
+        assertEquals(2, graph.getNumberOfUsedColors());
+
+        // 2. Empty Graph
+        // Create an empty graph with 0 nodes and 0 edges
+        Path tempFileEmptyGraph = createTempDIMACSFile(0, new int[][]{});
+        graph.loadDIMACS(tempFileEmptyGraph.toString());
+
+        // Sanity check
+        assertEquals(0, graph.getNumberOfEdges());
+
+        // Graph should contain nu unique colors.
+        assertEquals(0, graph.getNumberOfUsedColors());
+    }
+
+    @Test
     void testGetNeighbor() throws IOException {
         // 1. Regular Graph
         // Create a temporary graph with 5 nodes and edges: 1-2, 1-4, 2-3
@@ -589,4 +626,51 @@ class GraphTest {
         assertDoesNotThrow(() -> graph.applyReduction());
         assertEquals(0, graph.getNumberOfNodes());
     }
+
+    @Test
+    void testApplyConstructionHeuristic() throws IOException {
+        // 1. Path graph: 1 - 2 - 3  (0-based: 0 - 1 - 2)
+        // Expected: all nodes get color 0
+        Path pathGraph = createTempDIMACSFile(3, new int[][]{
+                {1, 2}, {2, 3}
+        });
+        graph.loadDIMACS(pathGraph.toString());
+
+        graph.applyConstructionHeuristic();
+
+        assertEquals(3, graph.getNumberOfNodes());
+        // All nodes should have color 0
+        assertEquals(0, graph.getColor(0));
+        assertEquals(0, graph.getColor(1));
+        assertEquals(0, graph.getColor(2));
+
+        // No other colors should occur
+        assertEquals(1, graph.getNumberOfUsedColors());
+
+        // 2. Triangle: complete graph K3
+        // Edges: 1-2, 2-3, 1-3  (0-based: 0-1,1-2,0-2)
+        // Expected: all nodes have different colors
+        graph = new Graph(); // reset
+        Path triangle = createTempDIMACSFile(3, new int[][]{
+                {1, 2}, {2, 3}, {1, 3}
+        });
+        graph.loadDIMACS(triangle.toString());
+
+        graph.applyConstructionHeuristic();
+
+        assertEquals(3, graph.getNumberOfNodes());
+
+        int c0 = graph.getColor(0);
+        int c1 = graph.getColor(1);
+        int c2 = graph.getColor(2);
+
+        // All colors must be distinct
+        assertNotEquals(c0, c1);
+        assertNotEquals(c1, c2);
+        assertNotEquals(c0, c2);
+
+        // Exactly 3 colors used
+        assertEquals(3, graph.getNumberOfUsedColors());
+    }
+
 }

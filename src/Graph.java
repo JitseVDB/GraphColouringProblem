@@ -96,6 +96,17 @@ public class Graph implements GraphInterface {
     }
 
     /**
+     * Returns the number of unique colors.
+     */
+    public int getNumberOfUsedColors() {
+        BitSet used = new BitSet();
+        for (int c : color) {
+            used.set(c);
+        }
+        return used.cardinality();
+    }
+
+    /**
      * Returns an unmodifiable collection of all neighbors of the given node.
      *
      * @param   v
@@ -524,7 +535,6 @@ public class Graph implements GraphInterface {
         }
     }
 
-
     /**
      * Applies a construction heuristic (RLF-style) to color the graph.
      */
@@ -533,7 +543,6 @@ public class Graph implements GraphInterface {
         if (verticeCount == 0) return;
 
         BitSet uncolored = (BitSet) active.clone();
-        int[] adjToBCount = new int[totalVertices]; // buffer for RLF scoring
         int currentColor = 0;
 
         while (!uncolored.isEmpty()) {
@@ -567,7 +576,6 @@ public class Graph implements GraphInterface {
                     BitSet tmp = (BitSet) adj[v].clone();
                     tmp.and(B);
                     int score = tmp.cardinality();
-                    adjToBCount[v] = score;
                     if (score > bestScore) {
                         bestScore = score;
                         bestV = v;
@@ -590,7 +598,6 @@ public class Graph implements GraphInterface {
             currentColor++; // Move to next color
         }
     }
-
 
     @Override
     public void applyStochasticLocalSearchAlgorithm() {
