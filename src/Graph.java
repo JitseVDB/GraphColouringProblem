@@ -6,6 +6,7 @@ import java.util.*;
 // TODO: Add safeguard to ensure all graphs are valid.
 // TODO: In reduction I assume we should keep track of nodes and edges to restore later.
 // TODO: Finish documentation apply... methods.
+// TODO: Currently RLF is unaware of deleted nodes and assumes every node is active.
 
 /**
  * A class representing graphs .
@@ -101,7 +102,9 @@ public class Graph implements GraphInterface {
     public int getNumberOfUsedColors() {
         BitSet used = new BitSet();
         for (int c : color) {
-            used.set(c);
+            if (c != -1) {
+                used.set(c);
+            }
         }
         return used.cardinality();
     }
@@ -535,67 +538,21 @@ public class Graph implements GraphInterface {
         }
     }
 
-    /**
-     * Applies a construction heuristic (RLF-style) to color the graph.
-     */
     @Override
     public void applyConstructionHeuristic() {
-        if (verticeCount == 0) return;
+        // 1. Choose a reasonable P (e.g., 0.2 for 20% of vertices as trial candidates)
+        double P = 0.2;
 
-        BitSet uncolored = (BitSet) active.clone();
-        int currentColor = 0;
+        // 2. Create RLF instance with this graph and P
+        RecursiveLargestFirst rlf = new RecursiveLargestFirst(this, P);
 
-        while (!uncolored.isEmpty()) {
-            // 1. Choose seed vertex: max degree among uncolored
-            int seed = -1;
-            int bestDeg = -1;
-            for (int v = uncolored.nextSetBit(0); v >= 0; v = uncolored.nextSetBit(v + 1)) {
-                if (degree[v] > bestDeg) {
-                    bestDeg = degree[v];
-                    seed = v;
-                }
-            }
+        // 3. Run the RLF heuristic to color the graph
+        rlf.colorGraph(); // colors are stored internally in rlf
 
-            // Create a new color class and mark seed as colored
-            BitSet C = new BitSet(totalVertices);
-            C.set(seed);
-            uncolored.clear(seed);
-            color[seed] = currentColor;
-
-            // Partition uncolored vertices: A = non-neighbors, B = neighbors of C
-            BitSet A = (BitSet) uncolored.clone();
-            A.andNot(adj[seed]);
-            BitSet B = (BitSet) uncolored.clone();
-            B.and(adj[seed]);
-
-            while (!A.isEmpty()) {
-                // Select vertex in A with max neighbors in B
-                int bestV = -1;
-                int bestScore = -1;
-                for (int v = A.nextSetBit(0); v >= 0; v = A.nextSetBit(v + 1)) {
-                    BitSet tmp = (BitSet) adj[v].clone();
-                    tmp.and(B);
-                    int score = tmp.cardinality();
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestV = v;
-                    }
-                }
-
-                // Add selected vertex to color class
-                C.set(bestV);
-                uncolored.clear(bestV);
-                color[bestV] = currentColor;
-
-                // Update A and B
-                BitSet neighbors = adj[bestV];
-                BitSet movedToB = (BitSet) A.clone();
-                movedToB.and(neighbors);
-                B.or(movedToB);
-                A.andNot(neighbors);
-            }
-
-            currentColor++; // Move to next color
+        // 4. Update the Graph's node colors with the RLF result
+        int[] rlfColors = rlf.getColors();
+        for (int node : getNodes()) {
+            this.colorNode(node, rlfColors[node]);
         }
     }
 
@@ -604,7 +561,7 @@ public class Graph implements GraphInterface {
         // Placeholder
     }
 
-    // Helper methods to allow GraphVisualizer access to internal representation
+    // Helper methods to allow access to internal representation in other Classes
     public Map<Integer, BitSet> getAdjCopy() {
         Map<Integer, BitSet> copy = new HashMap<>();
         for (int v = active.nextSetBit(0); v >= 0; v = active.nextSetBit(v + 1)) {
@@ -619,5 +576,12 @@ public class Graph implements GraphInterface {
             copy.put(v, color[v]);
         }
         return copy;
+    }
+
+    /**
+     * Returns a copy of the degrees of all vertices in the graph.
+     */
+    public int[] getDegreesCopy() {
+        return Arrays.copyOf(degree, degree.length);
     }
 }

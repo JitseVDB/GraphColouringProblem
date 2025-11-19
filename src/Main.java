@@ -8,6 +8,8 @@ public class Main {
 
     public static void main(String[] args) {
         String[] testFiles = {
+                "abb313GPIA.col",
+                "ash331GPIA.col",
                 "DSJC125.1.col"
         };
 
