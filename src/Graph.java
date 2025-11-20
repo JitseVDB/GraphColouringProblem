@@ -10,7 +10,7 @@ import java.util.*;
 // TODO: Check how edges connecting non-existent nodes get handled.
 
 /**
- * A class representing graphs .
+ * A class representing graphs.
  *
  * @author  Jitse Vandenberghe
  *
