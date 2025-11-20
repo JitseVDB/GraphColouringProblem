@@ -10,6 +10,7 @@ import java.util.BitSet;
  * global coloring array.
  *
  * @author  Jitse Vandenberghe
+ *
  * @version 1.1
  */
 public class RLFState {
@@ -103,16 +104,27 @@ public class RLFState {
     }
 
     /**
-     * Copy constructor for trial classes.
+     * Creates a deep copy of this RLFState object.
      *
-     * @post    Returns a deep copy of this RLFState object.
+     * The returned object is a completely independent copy: modifying
+     * any field in the copy will not affect the original object.
+     *
+     * @post    The returned RLFState has the same total number of vertices as this object.
      *          | result.n == this.n
+     *
+     * @post    The BitSets representing uncolored vertices, forbidden vertices,
+     *          and the current color class are identical to this object.
      *          | result.U.equals(this.U)
      *          | result.W.equals(this.W)
      *          | result.Cv.equals(this.Cv)
+     *
+     * @post    The degree arrays and color array are identical copies of this object.
      *          | Arrays.equals(result.degreesU, this.degreesU)
      *          | Arrays.equals(result.degreesW, this.degreesW)
      *          | Arrays.equals(result.colors, this.colors)
+     *
+     * @return  A new RLFState object that is a deep copy of this object.
+     *          | result != this
      */
     public RLFState copy() {
         RLFState copy = new RLFState();
@@ -130,9 +142,9 @@ public class RLFState {
     RLFState() {}
 
     /**
-     * Returns true if there are any uncolored vertices left in this state.
+     * Check wether the graph has uncolored vertices.
      *
-     * @post    result == true if there exists v in [0, n) such that U.get(v) == true
+     * @return  True if there exists an uncolored node; otherwise false
      *          | result == !U.isEmpty()
      */
     public boolean hasUncoloredVertices() {
@@ -142,7 +154,7 @@ public class RLFState {
     /**
      * Returns the number of uncolored vertices in this state.
      *
-     * @post    result == the number of bits set in U
+     * @return  The number of vertices v for which U.get(v) == true.
      *          | result == U.cardinality()
      */
     public int getUncoloredCount() {
