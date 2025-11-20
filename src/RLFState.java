@@ -10,7 +10,7 @@ public class RLFState {
     public int[] degreesW;    // degrees restricted to W
     public int[] colors;      // current coloring
 
-    public int n;             // number of vertices
+    public int n;             // total number of vertices (including deleted vertices)
 
     /**
      * Initialize the RLF state from a graph.
@@ -18,7 +18,7 @@ public class RLFState {
      * DegreesU is copied from the graph's degrees.
      */
     public RLFState(Graph graph) {
-        n = graph.getNumberOfNodes();
+        n = graph.getTotalVertices();
 
         U = new BitSet(n);
         W = new BitSet(n);

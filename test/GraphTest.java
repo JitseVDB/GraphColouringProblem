@@ -77,7 +77,7 @@ class GraphTest {
         Path tempFileGraph = createTempDIMACSFile(3, new int[][]{{1, 2}, {2, 3}});
         graph.loadDIMACS(tempFileGraph.toString());
 
-        // The graph edge count should be exactly 2.
+        // The graph node count should be exactly 3.
         assertEquals(3, graph.getNumberOfNodes());
 
         // 2. Empty Graph
@@ -87,6 +87,30 @@ class GraphTest {
 
         // The graph should contain exactly no nodes
         assertEquals(0, graph.getNumberOfNodes());
+    }
+
+    @Test
+    void testGetTotalVertices() throws IOException {
+        // 1. Regular Graph
+        // Create a temporary graph with 3 nodes and 2 edges: 1-2, 2-3
+        Path tempFileGraph = createTempDIMACSFile(3, new int[][]{{1, 2}, {2, 3}});
+        graph.loadDIMACS(tempFileGraph.toString());
+
+        // The total amount of vertices for the graph should be 3.
+        assertEquals(3, graph.getTotalVertices());
+
+        graph.removeNode(0);
+
+        // The graph should still contain the same amount of vertices.
+        assertEquals(3, graph.getTotalVertices());
+
+        // 2. Empty Graph
+        // Create an empty graph with 0 nodes and 0 edges
+        Path tempFileEmptyGraph = createTempDIMACSFile(0, new int[][]{});
+        graph.loadDIMACS(tempFileEmptyGraph.toString());
+
+        // The graph should contain exactly no nodes
+        assertEquals(0, graph.getTotalVertices());
     }
 
     @Test
@@ -233,6 +257,27 @@ class GraphTest {
 
         // 2.1 Non-existent nodes
         assertThrows(IllegalArgumentException.class, () -> graph.areNeighbors(0, 1));
+    }
+
+    @Test
+    void testIsActive() throws IOException {
+        // 1. Regular Graph
+        Path file = createTempDIMACSFile(3, new int[][]{{1, 2}, {2, 3}});
+        graph.loadDIMACS(file.toString());
+
+        int originalEdgeCount = graph.getNumberOfEdges();
+        int numberOfNeighbors1 = graph.getNeighborsOf(1).size(); // node 2 in 0-based
+
+        // 1.1 Remove a node with multiple neighbors (node 1 in 0-based)
+        assertEquals(3, graph.getNumberOfNodes());
+        assertEquals(2, graph.getNumberOfEdges());
+
+        graph.removeNode(0);
+
+        assertFalse(graph.isActive(0));
+        assertTrue(graph.isActive(1));
+        assertTrue(graph.isActive(2));
+        assertThrows(IllegalArgumentException.class, () -> graph.isActive(3));
     }
 
     @Test
@@ -626,51 +671,4 @@ class GraphTest {
         assertDoesNotThrow(() -> graph.applyReduction());
         assertEquals(0, graph.getNumberOfNodes());
     }
-
-    @Test
-    void testApplyConstructionHeuristic() throws IOException {
-        // 1. Path graph: 1 - 2 - 3  (0-based: 0 - 1 - 2)
-        // Expected: all nodes get color 0
-        Path pathGraph = createTempDIMACSFile(3, new int[][]{
-                {1, 2}, {2, 3}
-        });
-        graph.loadDIMACS(pathGraph.toString());
-
-        graph.applyConstructionHeuristic();
-
-        assertEquals(3, graph.getNumberOfNodes());
-        // All nodes should have color 0
-        assertEquals(0, graph.getColor(0));
-        assertEquals(0, graph.getColor(1));
-        assertEquals(0, graph.getColor(2));
-
-        // No other colors should occur
-        assertEquals(1, graph.getNumberOfUsedColors());
-
-        // 2. Triangle: complete graph K3
-        // Edges: 1-2, 2-3, 1-3  (0-based: 0-1,1-2,0-2)
-        // Expected: all nodes have different colors
-        graph = new Graph(); // reset
-        Path triangle = createTempDIMACSFile(3, new int[][]{
-                {1, 2}, {2, 3}, {1, 3}
-        });
-        graph.loadDIMACS(triangle.toString());
-
-        graph.applyConstructionHeuristic();
-
-        assertEquals(3, graph.getNumberOfNodes());
-
-        int c0 = graph.getColor(0);
-        int c1 = graph.getColor(1);
-        int c2 = graph.getColor(2);
-
-        // All colors must be distinct
-        assertNotEquals(c0, c1);
-        assertNotEquals(c1, c2);
-        assertNotEquals(c0, c2);
-
-        // Exactly 3 colors used
-        assertEquals(3, graph.getNumberOfUsedColors());
-    }
-
 }

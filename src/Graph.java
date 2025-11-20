@@ -7,6 +7,7 @@ import java.util.*;
 // TODO: In reduction I assume we should keep track of nodes and edges to restore later.
 // TODO: Finish documentation apply... methods.
 // TODO: Currently RLF is unaware of deleted nodes and assumes every node is active.
+// TODO: Check how edges connecting non-existent nodes get handled.
 
 /**
  * A class representing graphs .
@@ -79,13 +80,19 @@ public class Graph implements GraphInterface {
         return Collections.unmodifiableList(nodes);
     }
 
-
     /**
      * Returns the number of nodes.
      */
     @Override
     public int getNumberOfNodes() {
         return verticeCount;
+    }
+
+    /**
+     * Returns the original number of nodes.
+     */
+    public int getTotalVertices() {
+        return totalVertices;
     }
 
     /**
@@ -163,6 +170,27 @@ public class Graph implements GraphInterface {
         }
 
         return adj[u].get(v);
+    }
+
+    /**
+     * Check wether the given node is active (i.e. not deleted).
+     *
+     * @param   v
+     *          The node to check (0-based)
+     *
+     * @return  True if the node is active, false if it is deleted/inactive.
+     *          | result == (active.get(v))
+     *
+     * @throws  IllegalArgumentException
+     *          If either u or v does not exist in the graph.
+     *          | v < 0 || v >= totalVertices
+     */
+    public boolean isActive(int v) {
+        if (v < 0 || v >= totalVertices) {
+            throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
+        }
+
+        return  active.get(v);
     }
 
     /**
