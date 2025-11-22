@@ -17,7 +17,7 @@ import java.util.*;
  * @version 1.0
  */
 public class Graph implements GraphInterface {
-    private BitSet[] adj;         // adjacency[i] = neighbors of i
+    public BitSet[] adj;         // adjacency[i] = neighbors of i
     private int[] degree;         // cached degrees
     private int[] color;          // node colors
     private BitSet active;        // which vertices are still in the graph

@@ -45,6 +45,8 @@ public class RecursiveLargestFirst {
      */
     private int M;
 
+    private BitSet tmp;
+
     /**
      * Initialize a RecursiveLargestFirst solver for the given graph and trial percentage.
      *
@@ -78,6 +80,7 @@ public class RecursiveLargestFirst {
 
         // Ensure at least 1 vertex is considered for top-M trials
         this.M = Math.max(1, (int)(P * n));
+        this.tmp = new BitSet(n);
     }
 
 
@@ -253,17 +256,17 @@ public class RecursiveLargestFirst {
      *          | graph.getAdjCopy().get(node)
      */
     private void updateSets(RLFState state, int node) {
-        BitSet neighbors = (BitSet) graph.getAdjCopy().get(node).clone();
-        neighbors.and(state.U);
+        tmp.clear();
+        tmp.or(graph.adj[node]);
+        tmp.and(state.U);
+        state.W.or(tmp);
+        state.U.andNot(tmp);
 
-        // Move neighbors to W
-        state.W.or(neighbors);
-        state.U.andNot(neighbors);
-
-        for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
-            BitSet secondNeighbors = (BitSet) graph.getAdjCopy().get(v).clone();
-            secondNeighbors.and(state.U);
-            for (int u = secondNeighbors.nextSetBit(0); u >= 0; u = secondNeighbors.nextSetBit(u + 1)) {
+        for (int v = tmp.nextSetBit(0); v >= 0; v = tmp.nextSetBit(v + 1)) {
+            tmp.clear();
+            tmp.or(graph.adj[v]);
+            tmp.and(state.U);
+            for (int u = tmp.nextSetBit(0); u >= 0; u = tmp.nextSetBit(u + 1)) {
                 state.degreesU[u]--;
                 state.degreesW[u]++;
             }
