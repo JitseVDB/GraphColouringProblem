@@ -24,6 +24,7 @@ public class Graph implements GraphInterface {
     private int totalVertices;    // original number of vertices
     private int verticeCount;     // number of vertices
     private int edgeCount;        // number of edges
+    private int colorCount;
 
     // Load DIMACS .col file into adj BitSets (0-based)
     public void loadDIMACS(String filename) throws IOException {
@@ -31,6 +32,7 @@ public class Graph implements GraphInterface {
             String line;
             verticeCount = 0;
             edgeCount = 0;
+            colorCount = 0;
 
             while ((line = br.readLine()) != null) {
                 line = line.trim();
@@ -316,6 +318,36 @@ public class Graph implements GraphInterface {
     }
 
     /**
+     * Returns the color count of the coloring of the graph.
+     */
+    public int getColorCount() {
+        return colorCount;
+    }
+
+    /**
+     * Checks if the current coloring of the graph is valid.
+     * A coloring is valid if no two adjacent nodes share the same color.
+     *
+     * @return true if the coloring is valid, false otherwise
+     */
+    public boolean isValidColoring() {
+        for (int u = active.nextSetBit(0); u >= 0; u = active.nextSetBit(u + 1)) {
+            int colorU = color[u];
+            if (colorU == -1) continue; // skip uncolored nodes
+
+            BitSet neighbors = adj[u];
+            for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
+                if (!active.get(v)) continue; // skip inactive nodes
+                if (color[v] == colorU) {
+                    return false; // conflict found
+                }
+            }
+        }
+        return true;
+    }
+
+
+    /**
      * Computes the size of the maximum clique using a BitBoard Max Clique (BBMC) approach.
      * Only considers active nodes in the graph.
      *
@@ -575,7 +607,7 @@ public class Graph implements GraphInterface {
         RecursiveLargestFirst rlf = new RecursiveLargestFirst(this, P);
 
         // 3. Run the RLF heuristic to color the graph
-        rlf.colorGraph(); // colors are stored internally in rlf
+        colorCount = rlf.colorGraph();
 
         // 4. Update the Graph's node colors with the RLF result
         int[] rlfColors = rlf.getColors();
