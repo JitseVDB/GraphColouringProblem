@@ -1,38 +1,41 @@
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.*;
 
 public class BenchmarkRunner {
 
     private static final String GRAPH_DIR = "DIMACSGraphs/";
 
-    // All graph filenames in your benchmark set
-    private static final String[] BENCHMARK_GRAPHS = {
-            "DSJC125.1.col", "DSJC250.1.col", "DSJC500.1.col", "DSJC1000.1.col",
-            "DSJC125.5.col", "DSJC250.5.col", "DSJC500.5.col", "DSJC1000.5.col",
-            "DSJC125.9.col", "DSJC250.9.col", "DSJC500.9.col", "DSJC1000.9.col",
-            "flat300_20_0.col", "flat300_26_0.col", "flat300_28_0.col",
-            "flat1000_50_0.col", "flat1000_60_0.col", "flat1000_76_0.col",
-            "le450_5a.col", "le450_5b.col", "le450_5d.col",
-            "le450_15a.col", "le450_15b.col", "le450_15c.col", "le450_15d.col",
-            "le450_25c.col", "le450_25d.col",
-            "latin_square_10.col",
-            "qg_order100.col",
-            "queen6_6.col", "queen7_7.col", "queen8_8.col", "queen8_12.col",
-            "queen9_9.col", "queen10_10.col", "queen11_11.col", "queen12_12.col",
-            "queen13_13.col", "queen14_14.col", "queen15_15.col", "queen16_16.col",
-            "wap01a.col", "wap02a.col", "wap03a.col", "wap04a.col",
-            "wap06a.col", "wap07a.col", "wap08a.col",
-            "abb313GPIA.col", "ash331GPIA.col", "ash608GPIA.col", "ash958GPIA.col", "will199GPIA.col"
+    private static final String EXTENSION = ".col";
+
+    private static final String[] BENCHMARK_GRAPHS_BASE = {
+            "DSJC125.1", "DSJC250.1", "DSJC500.1", "DSJC1000.1",
+            "DSJC125.5", "DSJC250.5", "DSJC500.5", "DSJC1000.5",
+            "DSJC125.9", "DSJC250.9", "DSJC500.9", "DSJC1000.9",
+            "flat300_20_0", "flat300_26_0", "flat300_28_0",
+            "flat1000_50_0", "flat1000_60_0", "flat1000_76_0",
+            "le450_5a", "le450_5b", "le450_5d",
+            "le450_15a", "le450_15b", "le450_15c", "le450_15d",
+            "le450_25c", "le450_25d",
+            "latin_square_10",
+            "qg_order100",
+            "queen6_6", "queen7_7", "queen8_8", "queen8_12",
+            "queen9_9", "queen10_10", "queen11_11", "queen12_12",
+            "queen13_13", "queen14_14", "queen15_15", "queen16_16",
+            "wap01a", "wap02a", "wap03a", "wap04a",
+            "wap06a", "wap07a", "wap08a",
+            "abb313GPIA", "ash331GPIA", "ash608GPIA", "ash958GPIA", "will199GPIA"
     };
 
     public static void main(String[] args) {
 
-        System.out.println("Running benchmark on " + BENCHMARK_GRAPHS.length + " graphs...\n");
+        System.out.println("Running benchmark on " + BENCHMARK_GRAPHS_BASE.length + " graphs...\n");
 
-        for (String filename : BENCHMARK_GRAPHS) {
+        for (String baseName : BENCHMARK_GRAPHS_BASE) {
             System.out.println("================================================");
-            System.out.println("GRAPH: " + filename);
+            System.out.println("GRAPH: " + baseName);
+
+            String filename = baseName + EXTENSION;
 
             File f = new File(GRAPH_DIR + filename);
             if (!f.exists()) {
@@ -62,7 +65,7 @@ public class BenchmarkRunner {
                         + ", Removed Nodes: " + removedNodes
                         + ", Time: " + (durationReduction / 1_000_000) + " ms");
 
-                // Apply construction heuristic (e.g., RLF)
+                // Apply construction heuristic (RLF)
                 long startConstruction = System.nanoTime();
                 g.applyConstructionHeuristic();
                 long durationConstruction = System.nanoTime() - startConstruction;
@@ -74,6 +77,36 @@ public class BenchmarkRunner {
                 System.out.println("Construction -> Colors used: " + colorsUsed
                         + ", Valid Coloring: " + validColoring
                         + ", Time: " + (durationConstruction / 1_000_000) + " ms");
+
+                // Apply Stochastic local search algorithm (ILS)
+                long startStochasticSearch  = System.nanoTime();
+                g.applyStochasticLocalSearchAlgorithm();
+                long durationStochasticSearch = System.nanoTime() - startStochasticSearch;
+
+                // Check coloring
+                validColoring = g.isValidColoring();
+                colorsUsed = g.getColorCount();
+
+                System.out.println("Stochastic Search -> Colors used: " + colorsUsed
+                        + ", Valid Coloring: " + validColoring
+                        + ", Time: " + (durationStochasticSearch / 1_000_000) + " ms");
+
+                ILSResults.GraphResult paperResult = ILSResults.getResult(baseName);
+
+                int medPaperColors = paperResult.getMed();
+                int minPaperColors = paperResult.getMin();
+                double paperTimeSec = paperResult.getTimeSec();
+
+                double speedRatio = durationStochasticSearch / (paperTimeSec > 0 ? paperTimeSec : 1); // avoid division by zero
+                String speedComparison;
+                if (speedRatio < 1) {
+                    speedComparison = String.format("faster by %.2fx", 1.0 / speedRatio);
+                } else if (speedRatio > 1) {
+                    speedComparison = String.format("slower by %.2fx", speedRatio);
+                } else {
+                    speedComparison = "same speed";
+                }
+
 
             } catch (IOException e) {
                 System.err.println("Error loading graph: " + filename);
