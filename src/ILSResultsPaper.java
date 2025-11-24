@@ -1,7 +1,7 @@
 import java.util.HashMap;
 import java.util.Map;
 
-public class ILSResults {
+public class ILSResultsPaper {
 
     // Inner class to hold min, med, and time_sec
     public static class GraphResult {

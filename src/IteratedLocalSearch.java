@@ -21,7 +21,7 @@ public class IteratedLocalSearch {
     private long timeLimitMs;    // Time limit in milliseconds
 
     // Early stopping criterion
-    private int maxNoImprovement = 50; // max consecutive non-improving perturbations
+    private int maxNoImprovement = 1000; // max consecutive non-improving perturbations
 
     // Tabu list: stores recently changed node-color pairs
     private final int tabuTenure = 10; // number of iterations a move is tabu

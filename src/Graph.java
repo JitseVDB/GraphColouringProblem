@@ -350,83 +350,6 @@ public class Graph implements GraphInterface {
         return true;
     }
 
-
-    /**
-     * Computes the size of the maximum clique using a BitBoard Max Clique (BBMC) approach.
-     * Only considers active nodes in the graph.
-     *
-     * @return  the size of the maximum clique found in the graph
-     */
-    public int getMaxClique() {
-        if (active.isEmpty()) return 0; // no active nodes
-
-        int n = verticeCount;
-
-        // Recursive BBMC solver class
-        class BitBoardMaxClique {
-            int maxCliqueSize = 0;
-
-            /**
-             * Recursively expands a candidate set to find the maximum clique.
-             *
-             * @param   clique
-             *          The current clique as a BitSet of node indices.
-             *
-             * @param   candidates
-             *          The set of active nodes that can be added to the current clique.
-             *
-             * @effect Updates maxCliqueSize if the current clique is larger than previously found.
-             *          | if candidates.isEmpty()
-             *          |     then maxCliqueSize == max(maxCliqueSize, clique.cardinality())
-             */
-            void expand(BitSet clique, BitSet candidates) {
-                if (candidates.isEmpty()) {
-                    maxCliqueSize = Math.max(maxCliqueSize, clique.cardinality());
-                    return;
-                }
-
-                // Pivot: node in candidates with max degree among active neighbors
-                int pivot = -1, maxDegree = -1;
-                for (int v = candidates.nextSetBit(0); v >= 0; v = candidates.nextSetBit(v + 1)) {
-                    // Count only neighbors that are still active
-                    BitSet neighbors = (BitSet) adj[v].clone();
-                    neighbors.and(candidates);
-                    int degree = neighbors.cardinality();
-                    if (degree > maxDegree) {
-                        maxDegree = degree;
-                        pivot = v;
-                    }
-                }
-
-                // Candidates not connected to pivot
-                BitSet ext = (BitSet) candidates.clone();
-                ext.andNot(adj[pivot]);
-
-                for (int v = ext.nextSetBit(0); v >= 0; v = ext.nextSetBit(v + 1)) {
-                    clique.set(v);
-
-                    // New candidates are intersection of current candidates and neighbors of v
-                    BitSet newCandidates = (BitSet) candidates.clone();
-                    newCandidates.and(adj[v]);
-
-                    expand(clique, newCandidates);
-
-                    clique.clear(v);
-                    candidates.clear(v);
-                }
-            }
-        }
-
-        BitBoardMaxClique solver = new BitBoardMaxClique();
-        BitSet emptyClique = new BitSet(n);
-
-        // Start with all active nodes as candidates
-        BitSet allCandidates = (BitSet) active.clone();
-        solver.expand(emptyClique, allCandidates);
-
-        return solver.maxCliqueSize;
-    }
-
     /**
      * Remove the given node from the graph, along with all edges connected to it.
      * If the node does not exist or is inactive, this method throws an exception.
@@ -569,12 +492,13 @@ public class Graph implements GraphInterface {
     /**
      * Applies a heuristic reduction to the graph by removing vertices whose
      * degree is strictly less than the threshold. The threshold is determined
-     * as the size of the largest known clique in the graph.
+     * as the size of the largest known clique in the graph, this can be applied
+     * by using our k from the initial coloring
      */
     @Override
     public void applyReduction() {
-        // Determine threshold: largest known clique
-        int threshold = getMaxClique();
+        // Determine threshold: largest known clique equivalent to k of initial coloring.
+        int threshold = getColorCount();
 
         // Collect nodes to remove
         List<Integer> toRemove = new ArrayList<>();

@@ -8,9 +8,9 @@ public class Main {
 
     public static void main(String[] args) {
         String[] testFiles = {
+                "DSJC125.1.col",
                 "abb313GPIA.col",
-                "ash331GPIA.col",
-                "DSJC125.1.col"
+                "ash331GPIA.col"
         };
 
         Scanner scanner = new Scanner(System.in);
