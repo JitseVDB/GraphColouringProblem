@@ -277,6 +277,10 @@ public class Graph implements GraphInterface {
         return color[v];
     }
 
+    public int[] getColorArray() {
+        return color;
+    }
+
     /**
      * Assigns a color to the given node.
      *
@@ -618,8 +622,29 @@ public class Graph implements GraphInterface {
 
     @Override
     public void applyStochasticLocalSearchAlgorithm() {
-        // Placeholder
+        // 1. Create an ILS instance with this graph and a time limit (e.g., 5 seconds)
+        long timeLimitMs = 5000; // you can adjust as needed
+        IteratedLocalSearch ils = new IteratedLocalSearch(this, timeLimitMs);
+
+        // 2. Run ILS on the graph to get the best coloring
+        int[] bestColors = ils.runIteratedLocalSearch(this);
+
+        // 3. Update the graph's internal color array
+        for (int v : getNodes()) {
+            color[v] = bestColors[v]; // assign best color to each active node
+        }
+
+        // 4. Update the graph's colorCount to match the best coloring
+        // We calculate the max color used among active nodes
+        BitSet usedColors = new BitSet();
+        for (int v : getNodes()) {
+            if (color[v] != -1) {
+                usedColors.set(color[v]);
+            }
+        }
+        colorCount = usedColors.cardinality();
     }
+
 
     // Helper methods to allow access to internal representation in other Classes
     public Map<Integer, BitSet> getAdjCopy() {
