@@ -17,14 +17,14 @@ import java.util.*;
  * @version 1.0
  */
 public class Graph implements GraphInterface {
-    public BitSet[] adj;         // adjacency[i] = neighbors of i
+    public BitSet[] adj;          // adjacency[i] = neighbors of i
     private int[] degree;         // cached degrees
     private int[] color;          // node colors
     private BitSet active;        // which vertices are still in the graph
     private int totalVertices;    // original number of vertices
     private int verticeCount;     // number of vertices
     private int edgeCount;        // number of edges
-    private int colorCount;
+    private int colorCount;       // number of colors
 
     // Load DIMACS .col file into adj BitSets (0-based)
     public void loadDIMACS(String filename) throws IOException {

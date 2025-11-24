@@ -6,8 +6,12 @@ import java.util.*;
  * Works on the active vertices of a graph and tries to iteratively reduce
  * the number of colors using local search with perturbations.
  *
- * @author  Jitse Vandenberghe
- * @version 1.1
+ * Stops early if no improvement occurs for a set number of perturbations.
+ *
+ * Adds a tabu list to avoid cycling.
+ *
+ * @author  Jitse
+ * @version 1.3
  */
 public class IteratedLocalSearch {
     private Graph graph;         // The graph to color
@@ -16,9 +20,19 @@ public class IteratedLocalSearch {
     private Random rng = new Random();
     private long timeLimitMs;    // Time limit in milliseconds
 
+    // Early stopping criterion
+    private int maxNoImprovement = 50; // max consecutive non-improving perturbations
+
+    // Tabu list: stores recently changed node-color pairs
+    private final int tabuTenure = 10; // number of iterations a move is tabu
+    private Map<Integer, Queue<Integer>> tabuList = new HashMap<>();
+
     public IteratedLocalSearch(Graph g, long timeLimitMs) {
         this.graph = g;
         this.timeLimitMs = timeLimitMs;
+        for (int v : g.getNodes()) {
+            tabuList.put(v, new LinkedList<>());
+        }
     }
 
     public int[] runIteratedLocalSearch(Graph g) {
@@ -32,6 +46,8 @@ public class IteratedLocalSearch {
 
         List<Integer> activeNodes = new ArrayList<>(graph.getNodes());
 
+        int noImprovementCount = 0;
+
         while (System.currentTimeMillis() < endTime) {
 
             boolean improved = true;
@@ -42,6 +58,7 @@ public class IteratedLocalSearch {
                     if (currentK < bestK) {
                         bestK = currentK;
                         bestColors = current.clone();
+                        noImprovementCount = 0; // reset counter on improvement
                     }
                 }
             }
@@ -56,7 +73,13 @@ public class IteratedLocalSearch {
             if (currentK < bestK) {
                 bestK = currentK;
                 bestColors = current.clone();
+                noImprovementCount = 0; // reset counter
+            } else {
+                noImprovementCount++;   // count consecutive non-improvements
             }
+
+            // Early stopping if stuck
+            if (noImprovementCount >= maxNoImprovement) break;
         }
 
         return bestColors;
@@ -84,7 +107,8 @@ public class IteratedLocalSearch {
         for (int v : classVerts) {
             boolean assigned = false;
             for (int c = 1; c < removedColor; c++) {
-                if (isColorAllowed(v, c, colors)) {
+                if (isColorAllowed(v, c, colors) && !isTabu(v, c)) {
+                    addToTabu(v, colors[v]); // mark old color as tabu
                     colors[v] = c;
                     assigned = true;
                     break;
@@ -109,7 +133,9 @@ public class IteratedLocalSearch {
     private void perturb(int[] colors, int strength, List<Integer> activeNodes) {
         Collections.shuffle(activeNodes, rng);
         for (int i = 0; i < strength && i < activeNodes.size(); i++) {
-            colors[activeNodes.get(i)] = -1;
+            int v = activeNodes.get(i);
+            addToTabu(v, colors[v]);
+            colors[v] = -1;
         }
         greedyRepair(colors, activeNodes);
     }
@@ -118,7 +144,8 @@ public class IteratedLocalSearch {
         for (int v : activeNodes) {
             if (colors[v] != -1) continue;
             int c = 1;
-            while (!isColorAllowed(v, c, colors)) c++;
+            while (!isColorAllowed(v, c, colors) || isTabu(v, c)) c++;
+            addToTabu(v, -1); // old value -1 is tabu now
             colors[v] = c;
         }
     }
@@ -140,5 +167,16 @@ public class IteratedLocalSearch {
             if (!remap.containsKey(c)) remap.put(c, next++);
             colors[v] = remap.get(c);
         }
+    }
+
+    private boolean isTabu(int v, int c) {
+        return tabuList.get(v).contains(c);
+    }
+
+    private void addToTabu(int v, int c) {
+        Queue<Integer> queue = tabuList.get(v);
+        if (c == -1) return; // skip empty color
+        queue.add(c);
+        if (queue.size() > tabuTenure) queue.poll();
     }
 }
