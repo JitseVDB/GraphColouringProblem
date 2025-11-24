@@ -1,30 +1,14 @@
 import java.util.*;
 
-/**
- * Implements the Iterated Local Search (ILS) algorithm for graph coloring.
- *
- * Works on the active vertices of a graph and tries to iteratively reduce
- * the number of colors using local search with perturbations.
- *
- * Stops early if no improvement occurs for a set number of perturbations.
- *
- * Adds a tabu list to avoid cycling.
- *
- * @author  Jitse
- * @version 1.3
- */
 public class IteratedLocalSearch {
-    private Graph graph;         // The graph to color
-    private int[] bestColors;    // Best coloring found
-    private int bestK;           // Number of colors in the best coloring
+    private Graph graph;
+    private int[] bestColors;
+    private int bestK;
     private Random rng = new Random();
-    private long timeLimitMs;    // Time limit in milliseconds
+    private long timeLimitMs;
 
-    // Early stopping criterion
-    private int maxNoImprovement = 1000; // max consecutive non-improving perturbations
-
-    // Tabu list: stores recently changed node-color pairs
-    private final int tabuTenure = 10; // number of iterations a move is tabu
+    private int maxNoImprovement = 1000;
+    private final int tabuTenure = 10;
     private Map<Integer, Queue<Integer>> tabuList = new HashMap<>();
 
     public IteratedLocalSearch(Graph g, long timeLimitMs) {
@@ -39,46 +23,45 @@ public class IteratedLocalSearch {
         long endTime = System.currentTimeMillis() + timeLimitMs;
 
         int[] current = g.getColorArray().clone();
-        int currentK = countColors(current);
-
         bestColors = current.clone();
-        bestK = currentK;
+        bestK = countColors(bestColors);
 
         List<Integer> activeNodes = new ArrayList<>(graph.getNodes());
-
         int noImprovementCount = 0;
 
         while (System.currentTimeMillis() < endTime) {
-
+            // Local search (TS1-ex / tryReduceColors)
             boolean improved = true;
             while (improved) {
                 improved = tryReduceColors(current, activeNodes);
-                if (improved) {
-                    currentK = countColors(current);
-                    if (currentK < bestK) {
-                        bestK = currentK;
-                        bestColors = current.clone();
-                        noImprovementCount = 0; // reset counter on improvement
-                    }
+                int currentK = countColors(current);
+                if (currentK < bestK) {
+                    bestK = currentK;
+                    bestColors = current.clone();
+                    noImprovementCount = 0;
                 }
             }
 
-            // local minimum reached → perturb
-            perturb(current, Math.max(1, bestK / 3), activeNodes);
+            // Perturbation applied to bestColors, not current
+            perturb(bestColors, activeNodes);
 
-            // repair → get feasible coloring again
-            greedyRepair(current, activeNodes);
-            currentK = countColors(current);
+            // Copy perturbed bestColors into current for next local search
+            current = bestColors.clone();
 
-            if (currentK < bestK) {
-                bestK = currentK;
-                bestColors = current.clone();
-                noImprovementCount = 0; // reset counter
-            } else {
-                noImprovementCount++;   // count consecutive non-improvements
+            // Local search on perturbed solution
+            improved = true;
+            while (improved) {
+                improved = tryReduceColors(current, activeNodes);
+                int currentK = countColors(current);
+                if (currentK < bestK) {
+                    bestK = currentK;
+                    bestColors = current.clone();
+                    noImprovementCount = 0;
+                }
             }
 
-            // Early stopping if stuck
+            // Early stopping
+            noImprovementCount++;
             if (noImprovementCount >= maxNoImprovement) break;
         }
 
@@ -87,20 +70,21 @@ public class IteratedLocalSearch {
 
     private boolean tryReduceColors(int[] colors, List<Integer> activeNodes) {
         int k = countColors(colors);
+        boolean improved = false;
 
         for (int target = k; target >= 1; target--) {
             List<Integer> classVertices = new ArrayList<>();
             for (int v : activeNodes) {
-                if (colors[v] == target)
-                    classVertices.add(v);
+                if (colors[v] == target) classVertices.add(v);
             }
 
             if (canRecolorClass(classVertices, colors, target)) {
                 compactColorNumbers(colors, activeNodes);
-                return true;
+                improved = true;
             }
         }
-        return false;
+
+        return improved;
     }
 
     private boolean canRecolorClass(List<Integer> classVerts, int[] colors, int removedColor) {
@@ -130,13 +114,32 @@ public class IteratedLocalSearch {
         return true;
     }
 
-    private void perturb(int[] colors, int strength, List<Integer> activeNodes) {
-        Collections.shuffle(activeNodes, rng);
-        for (int i = 0; i < strength && i < activeNodes.size(); i++) {
-            int v = activeNodes.get(i);
+    private void perturb(int[] colors, List<Integer> activeNodes) {
+        // Clear tabu list
+        for (int v : activeNodes) tabuList.get(v).clear();
+
+        // Select kr < k color classes randomly
+        int k = countColors(colors);
+        int kr = Math.max(1, k / 3);
+        List<Integer> colorClasses = new ArrayList<>();
+        for (int c = 1; c <= k; c++) colorClasses.add(c);
+        Collections.shuffle(colorClasses, rng);
+
+        Set<Integer> uncolorVertices = new HashSet<>();
+        for (int i = 0; i < kr && i < colorClasses.size(); i++) {
+            int colorToRemove = colorClasses.get(i);
+            for (int v : activeNodes) {
+                if (colors[v] == colorToRemove) uncolorVertices.add(v);
+            }
+        }
+
+        // Uncolor vertices and mark old colors in tabu
+        for (int v : uncolorVertices) {
             addToTabu(v, colors[v]);
             colors[v] = -1;
         }
+
+        // Repair with ROS-like heuristic
         greedyRepair(colors, activeNodes);
     }
 
@@ -145,17 +148,16 @@ public class IteratedLocalSearch {
             if (colors[v] != -1) continue;
             int c = 1;
             while (!isColorAllowed(v, c, colors) || isTabu(v, c)) c++;
-            addToTabu(v, -1); // old value -1 is tabu now
-            colors[v] = c;
+            colors[v] = c; // assign color
         }
     }
 
     private int countColors(int[] colors) {
-        int max = 0;
+        BitSet used = new BitSet();
         for (int v : graph.getNodes()) {
-            if (colors[v] > max) max = colors[v];
+            if (colors[v] != -1) used.set(colors[v]);
         }
-        return max;
+        return used.cardinality();
     }
 
     private void compactColorNumbers(int[] colors, List<Integer> activeNodes) {
@@ -174,8 +176,8 @@ public class IteratedLocalSearch {
     }
 
     private void addToTabu(int v, int c) {
+        if (c == -1) return;
         Queue<Integer> queue = tabuList.get(v);
-        if (c == -1) return; // skip empty color
         queue.add(c);
         if (queue.size() > tabuTenure) queue.poll();
     }

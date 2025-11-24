@@ -8,6 +8,8 @@ import java.util.*;
 // TODO: Finish documentation apply... methods.
 // TODO: Currently RLF is unaware of deleted nodes and assumes every node is active.
 // TODO: Check how edges connecting non-existent nodes get handled.
+// TODO: Rewrite testApplyReduction to accomodate k replacing w(G).
+// TODO: Fix ILS (!)
 
 /**
  * A class representing graphs.
