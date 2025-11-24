@@ -28,7 +28,6 @@ public class BenchmarkRunner {
             "wap01a", "wap02a", "wap03a", "wap04a",
             "wap05a", "wap06a", "wap07a", "wap08a",
             "abb313GPIA", "ash331GPIA", "ash608GPIA", "ash958GPIA", "will199GPIA",
-
     };
 
     public static void main(String[] args) {
@@ -119,7 +118,7 @@ public class BenchmarkRunner {
                     }
 
                     // Compare execution speed
-                    double speedRatio = durationStochasticSearch / (paperTimeSec * 1_000_000_000); // ns / s -> ratio
+                    double speedRatio = (durationConstruction + durationReduction + durationStochasticSearch) / (paperTimeSec * 1_000_000_000); // ns / s -> ratio
                     String speedComparison;
                     if (speedRatio < 1) {
                         speedComparison = String.format("faster by %.2fx", 1.0 / speedRatio);

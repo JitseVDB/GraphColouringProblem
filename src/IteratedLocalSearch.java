@@ -30,7 +30,7 @@ public class IteratedLocalSearch {
         int noImprovementCount = 0;
 
         while (System.currentTimeMillis() < endTime) {
-            // Local search (TS1-ex / tryReduceColors)
+            // Intensify: local search starting from current
             boolean improved = true;
             while (improved) {
                 improved = tryReduceColors(current, activeNodes);
@@ -42,26 +42,36 @@ public class IteratedLocalSearch {
                 }
             }
 
-            // Perturbation applied to bestColors, not current
-            perturb(bestColors, activeNodes);
+            // Generate a perturbed candidate from bestColors (work on a copy)
+            int[] candidate = bestColors.clone();
 
-            // Copy perturbed bestColors into current for next local search
-            current = bestColors.clone();
+            // Clear tabu list (paper empties tabu before perturbation)
+            for (int v : activeNodes) tabuList.get(v).clear();
 
-            // Local search on perturbed solution
-            improved = true;
-            while (improved) {
-                improved = tryReduceColors(current, activeNodes);
-                int currentK = countColors(current);
-                if (currentK < bestK) {
-                    bestK = currentK;
-                    bestColors = current.clone();
-                    noImprovementCount = 0;
-                }
+            // Apply perturbation to the candidate (use existing perturb method but applied on the copy)
+            perturb(candidate, activeNodes);
+
+            // Local search on candidate
+            boolean candImproved = true;
+            while (candImproved) {
+                candImproved = tryReduceColors(candidate, activeNodes);
             }
 
-            // Early stopping
-            noImprovementCount++;
+            int candidateK = countColors(candidate);
+
+            // Acceptance: only accept candidate if it improves bestK
+            if (candidateK < bestK) {
+                bestK = candidateK;
+                bestColors = candidate.clone();
+                // set current to this improved candidate, reset noImprovementCount
+                current = candidate.clone();
+                noImprovementCount = 0;
+            } else {
+                // do NOT overwrite bestColors; optionally set current = bestColors to restart intensification
+                current = bestColors.clone();
+                noImprovementCount++;
+            }
+
             if (noImprovementCount >= maxNoImprovement) break;
         }
 
@@ -69,37 +79,68 @@ public class IteratedLocalSearch {
     }
 
     private boolean tryReduceColors(int[] colors, List<Integer> activeNodes) {
-        int k = countColors(colors);
         boolean improved = false;
 
-        for (int target = k; target >= 1; target--) {
-            List<Integer> classVertices = new ArrayList<>();
-            for (int v : activeNodes) {
-                if (colors[v] == target) classVertices.add(v);
+        while (true) {
+            int k = countColors(colors);
+            boolean localChange = false;
+
+            for (int target = k; target >= 1; target--) {
+                // collect vertices in the target class
+                List<Integer> classVertices = new ArrayList<>();
+                for (int v : activeNodes) {
+                    if (colors[v] == target) classVertices.add(v);
+                }
+                if (classVertices.isEmpty()) continue;
+
+                if (canRecolorClass(classVertices, colors, target)) {
+                    compactColorNumbers(colors, activeNodes);
+                    localChange = true;
+                    improved = true;
+                    // after a successful recolor we should restart from the new k
+                    break;
+                }
             }
 
-            if (canRecolorClass(classVertices, colors, target)) {
-                compactColorNumbers(colors, activeNodes);
-                improved = true;
-            }
+            if (!localChange) break; // no recolor possible this pass
         }
 
         return improved;
     }
 
     private boolean canRecolorClass(List<Integer> classVerts, int[] colors, int removedColor) {
+        // Work on a temporary copy to avoid partial commits on failure
+        int[] tempColors = colors.clone();
+        List<int[]> tabuAdds = new ArrayList<>(); // store pairs (v, colorAdded)
+
         for (int v : classVerts) {
             boolean assigned = false;
             for (int c = 1; c < removedColor; c++) {
-                if (isColorAllowed(v, c, colors) && !isTabu(v, c)) {
-                    addToTabu(v, colors[v]); // mark old color as tabu
-                    colors[v] = c;
+                if (isColorAllowed(v, c, tempColors) && !isTabu(v, c)) {
+                    // record the move in tempColors and record tabu addition to be performed later
+                    tabuAdds.add(new int[]{v, tempColors[v]}); // record old color for tabu
+                    tempColors[v] = c;
                     assigned = true;
                     break;
                 }
             }
-            if (!assigned) return false;
+            if (!assigned) {
+                // rollback not necessary for tempColors, but we must not commit anything
+                return false;
+            }
         }
+
+        // All vertices could be assigned -> commit changes and commit tabu entries
+        for (int v : classVerts) {
+            colors[v] = tempColors[v];
+        }
+        // commit tabu additions
+        for (int[] entry : tabuAdds) {
+            int v = entry[0];
+            int oldColor = entry[1];
+            addToTabu(v, oldColor);
+        }
+
         return true;
     }
 

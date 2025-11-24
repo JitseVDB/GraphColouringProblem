@@ -571,7 +571,6 @@ public class Graph implements GraphInterface {
         colorCount = usedColors.cardinality();
     }
 
-
     // Helper methods to allow access to internal representation in other Classes
     public Map<Integer, BitSet> getAdjCopy() {
         Map<Integer, BitSet> copy = new HashMap<>();
