@@ -171,8 +171,25 @@ public class RecursiveLargestFirst {
             next.U = (BitSet) best.W.clone();       // remaining vertices to color next
             next.W = new BitSet(n);                 // empty W for next iteration
             next.Cv = new BitSet(n);                // empty current color class
-            next.degreesU = Arrays.copyOf(best.degreesW, n); // degrees w.r.t. the new U
+            // recompute degreesU and degreesW for next iteration
+            next.degreesU = new int[n];
             next.degreesW = new int[n];
+
+            for (int v = next.U.nextSetBit(0); v >= 0; v = next.U.nextSetBit(v + 1)) {
+
+                // neighbors of v
+                BitSet neigh = (BitSet) graph.adj[v].clone();
+
+                // neighbors still in U
+                BitSet inU = (BitSet) neigh.clone();
+                inU.and(next.U);
+                next.degreesU[v] = inU.cardinality();
+
+                // neighbors not in U (i.e., colored or removed)
+                neigh.andNot(next.U);
+                next.degreesW[v] = neigh.cardinality();
+            }
+
             next.colors = Arrays.copyOf(best.colors, n);
 
             // set mainState to new prepared state and continue
@@ -256,22 +273,33 @@ public class RecursiveLargestFirst {
      *          | graph.getAdjCopy().get(node)
      */
     private void updateSets(RLFState state, int node) {
-        tmp.clear();
-        tmp.or(graph.adj[node]);
-        tmp.and(state.U);
-        state.W.or(tmp);
-        state.U.andNot(tmp);
 
-        for (int v = tmp.nextSetBit(0); v >= 0; v = tmp.nextSetBit(v + 1)) {
-            tmp.clear();
-            tmp.or(graph.adj[v]);
-            tmp.and(state.U);
-            for (int u = tmp.nextSetBit(0); u >= 0; u = tmp.nextSetBit(u + 1)) {
-                state.degreesU[u]--;
-                state.degreesW[u]++;
+        // Move node to Cv (already done by caller)
+
+        BitSet neighbors = (BitSet) graph.adj[node].clone();
+
+        // For each neighbor of node that is still in U
+        for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
+
+            if (state.U.get(v)) {
+
+                // decrement degreesU of v itself
+                state.degreesU[v]--;
+
+                // move v: U → W
+                state.U.clear(v);
+                state.W.set(v);
+
+                // update degrees for all neighbors of v
+                BitSet neigh2 = (BitSet) graph.adj[v].clone();
+                for (int u = neigh2.nextSetBit(0); u >= 0; u = neigh2.nextSetBit(u + 1)) {
+                    state.degreesU[u]--;
+                    state.degreesW[u]++;
+                }
             }
         }
     }
+
 
     /**
      * Determines the next vertex to add to the current color class based on RLF rules.
