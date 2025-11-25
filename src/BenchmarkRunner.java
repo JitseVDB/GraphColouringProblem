@@ -37,10 +37,11 @@ public class BenchmarkRunner {
         for (String baseName : BENCHMARK_GRAPHS_BASE) {
             System.out.println("================================================");
             System.out.println("GRAPH: " + baseName);
+            System.out.println("------------------------------------------------");
 
             String filename = baseName + EXTENSION;
-
             File f = new File(GRAPH_DIR + filename);
+
             if (!f.exists()) {
                 System.err.println("ERROR: File not found at " + f.getAbsolutePath());
                 continue;
@@ -53,22 +54,23 @@ public class BenchmarkRunner {
                 g.loadDIMACS(GRAPH_DIR + filename);
                 int originalNodes = g.getNumberOfNodes();
                 int originalEdges = g.getNumberOfEdges();
-                System.out.println("\nOriginal Graph -> Nodes: " + originalNodes + ", Edges: " + originalEdges);
 
-                // Apply construction heuristic (RLF)
+                System.out.println("\n[ ORIGINAL GRAPH ]");
+                System.out.printf("  Nodes: %-6d Edges: %-6d%n", originalNodes, originalEdges);
+
+                // Construction Heuristic
                 long startConstruction = System.nanoTime();
                 g.applyConstructionHeuristic();
                 long durationConstruction = System.nanoTime() - startConstruction;
 
-                // Check coloring
                 boolean validColoring = g.isValidColoring();
                 int colorsUsed = g.getColorCount();
 
-                System.out.println("\nConstruction -> Colors used: " + colorsUsed
-                        + ", Valid Coloring: " + validColoring
-                        + ", Time: " + (durationConstruction / 1_000_000) + " ms");
+                System.out.println("\n[ CONSTRUCTION HEURISTIC ]");
+                System.out.printf("  Colors Used: %-6d Valid: %-6s Time: %d ms%n",
+                        colorsUsed, validColoring, durationConstruction / 1_000_000);
 
-                // Apply reduction
+                // Reduction
                 long startReduction = System.nanoTime();
                 g.applyReduction();
                 long durationReduction = System.nanoTime() - startReduction;
@@ -77,24 +79,25 @@ public class BenchmarkRunner {
                 int reducedEdges = g.getNumberOfEdges();
                 int removedNodes = originalNodes - reducedNodes;
 
-                System.out.println("\nReduction -> Nodes: " + reducedNodes
-                        + ", Edges: " + reducedEdges+ ", Removed Nodes: "
-                        + removedNodes+ ", Time: " + (durationReduction / 1_000_000) + " ms");
+                System.out.println("\n[ REDUCTION ]");
+                System.out.printf("  Nodes: %-6d Edges: %-6d Removed: %-6d Time: %d ms%n",
+                        reducedNodes, reducedEdges, removedNodes, durationReduction / 1_000_000);
 
-                // Apply Stochastic local search algorithm (ILS)
-                long startStochasticSearch  = System.nanoTime();
+                // ILS Stochastic Search
+                long startStochasticSearch = System.nanoTime();
                 g.applyStochasticLocalSearchAlgorithm();
                 long durationStochasticSearch = System.nanoTime() - startStochasticSearch;
 
-                // Check coloring
                 validColoring = g.isValidColoring();
                 colorsUsed = g.getColorCount();
 
-                System.out.println("\nStochastic Search -> Colors used: " + colorsUsed
-                        + ", Valid Coloring: " + validColoring
-                        + ", Time: " + (durationStochasticSearch / 1_000_000) + " ms");
+                System.out.println("\n[ STOCHASTIC LOCAL SEARCH ]");
+                System.out.printf("  Colors Used: %-6d Valid: %-6s Time: %d ms%n",
+                        colorsUsed, validColoring, durationStochasticSearch / 1_000_000);
 
-                // Compare with paper results
+                // Paper comparison
+                System.out.println("\n[ PAPER REFERENCE RESULTS ]");
+
                 ILSResultsPaper.GraphResult paperResult = ILSResultsPaper.getResult(baseName);
 
                 try {
@@ -102,47 +105,43 @@ public class BenchmarkRunner {
                     int minPaperColors = paperResult.getMin();
                     double paperTimeSec = paperResult.getTimeSec();
 
-                    System.out.println("\nPaper Results -> Median Colors: " + medPaperColors
-                            + ", Min Colors: " + minPaperColors
-                            + ", Time: " + paperTimeSec + " s");
+                    System.out.printf("  Min Colors: %-6d Median Colors: %-6d Time: %.2f s%n",
+                            minPaperColors, medPaperColors, paperTimeSec);
 
-                    // Compare our result with paper
+                    // Compare results
+                    System.out.print("  Comparison:   ");
+
                     if (colorsUsed < minPaperColors) {
-                        System.out.println("Our coloring uses fewer colors than the paper's minimum!");
+                        System.out.println("Better than paper minimum!");
                     } else if (colorsUsed == minPaperColors) {
-                        System.out.println("Our coloring matches the paper's minimum number of colors.");
+                        System.out.println("Matches paper minimum.");
                     } else if (colorsUsed <= medPaperColors) {
-                        System.out.println("Our coloring is between the paper's minimum and median.");
+                        System.out.println("Between minimum and median.");
                     } else {
-                        System.out.println("Our coloring is worse than the paper's median.");
+                        System.out.println("Worse than paper median.");
                     }
 
-                    // Compare execution speed
-                    double speedRatio = (durationConstruction + durationReduction + durationStochasticSearch) / (paperTimeSec * 1_000_000_000); // ns / s -> ratio
-                    String speedComparison;
+                    double speedRatio = (durationConstruction + durationReduction + durationStochasticSearch)
+                            / (paperTimeSec * 1_000_000_000);
+
                     if (speedRatio < 1) {
-                        speedComparison = String.format("faster by %.2fx", 1.0 / speedRatio);
-                    } else if (speedRatio > 1) {
-                        speedComparison = String.format("slower by %.2fx", speedRatio);
+                        System.out.printf("  Speed:        Faster (%.2fx)%n", 1.0 / speedRatio);
                     } else {
-                        speedComparison = "same speed";
+                        System.out.printf("  Speed:        Slower (%.2fx)%n", speedRatio);
                     }
 
-                    System.out.println("Execution Speed: " + speedComparison);
                 } catch (Exception e) {
-                    System.out.println("This graph is not present in the paper.");
+                    System.out.println("  No paper results available for this graph.");
                 }
 
+                System.out.println();
 
-            } catch (IOException e) {
-                System.err.println("Error loading graph: " + filename);
-                e.printStackTrace();
             } catch (Exception e) {
                 System.err.println("Unexpected error on graph: " + filename);
                 e.printStackTrace();
             }
 
-            System.out.println();
+            System.out.println("================================================\n");
         }
 
         System.out.println("Benchmark complete.");
