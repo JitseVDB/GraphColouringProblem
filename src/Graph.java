@@ -553,7 +553,7 @@ public class Graph implements GraphInterface {
         IteratedLocalSearch ils = new IteratedLocalSearch(this, timeLimitMs);
 
         // 2. Run ILS on the graph to get the best coloring
-        int[] bestColors = ils.runIteratedLocalSearch(this);
+        int[] bestColors = ils.runIteratedLocalSearch();
 
         // 3. Update the graph's internal color array
         for (int v : getNodes()) {
