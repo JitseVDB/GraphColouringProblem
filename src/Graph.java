@@ -546,29 +546,26 @@ public class Graph implements GraphInterface {
         }
     }
 
+    /**
+     * Applies Iterated Local Search (ILS) with Tabu Search.
+     * This method assumes an initial coloring exists (e.g., from RLF).
+     * It will modify the graph's coloring in-place if a better solution is found.
+     */
     @Override
     public void applyStochasticLocalSearchAlgorithm() {
-        // 1. Create an ILS instance with this graph and a time limit (e.g., 5 seconds)
-        long timeLimitMs = 5000; // you can adjust as needed
-        IteratedLocalSearch ils = new IteratedLocalSearch(this, timeLimitMs);
+        // 1. Define a time limit (e.g., 60 seconds or based on benchmark rules)
+        long timeLimitMillis = 10000; // 10 seconds for now
 
-        // 2. Run ILS on the graph to get the best coloring
-        int[] bestColors = ils.runIteratedLocalSearch();
+        // 2. Create the solver
+        IteratedLocalSearch ils = new IteratedLocalSearch(this, timeLimitMillis);
 
-        // 3. Update the graph's internal color array
-        for (int v : getNodes()) {
-            color[v] = bestColors[v]; // assign best color to each active node
-        }
+        // 3. Run the solver.
+        // NOTE: The ILS class automatically updates 'this' graph
+        // whenever it finds a valid coloring with fewer colors.
+        ils.solve();
 
-        // 4. Update the graph's colorCount to match the best coloring
-        // We calculate the max color used among active nodes
-        BitSet usedColors = new BitSet();
-        for (int v : getNodes()) {
-            if (color[v] != -1) {
-                usedColors.set(color[v]);
-            }
-        }
-        colorCount = usedColors.cardinality();
+        // 4. Update the internal colorCount cache of the Graph class
+        this.colorCount = this.getNumberOfUsedColors();
     }
 
     // Helper methods to allow access to internal representation in other Classes

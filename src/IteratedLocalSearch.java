@@ -2,278 +2,258 @@ import java.util.*;
 
 public class IteratedLocalSearch {
 
-    private final Graph g;
-    private final Random rng = new Random();
-    private final long timeLimitMs;
+    private final Graph graph;
+    private final long timeLimitMillis;
 
-    // Parameters
-    private static final int MAX_LOCAL_NO_IMPROVE = 2000;
-    private static final double PERTURB_FRACTION = 0.10;
-    private static final double ACCEPT_WORSE_PROB = 0.05;
+    // Algorithm Parameters
+    private static final int A = 10;
+    private static final double DELTA = 0.6;
+    private static final int MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 1000; // Lowered for responsiveness
+    private static final int PERTURBATION_STRENGTH = 2;
 
-    // Cache node list to avoid recreating it repeatedly
-    private final int[] nodes;
+    // NEW: Stop trying a specific K if we have perturbed this many times with no success
+    private static final int MAX_PERTURBATIONS_PER_K = 100;
 
-    public IteratedLocalSearch(Graph g, long timeLimitMs) {
-        this.g = g;
-        this.timeLimitMs = timeLimitMs;
+    private Random random;
 
-        // Cache nodes for performance
-        List<Integer> list = new ArrayList<>(g.getNodes());
-        nodes = new int[list.size()];
-        for (int i = 0; i < list.size(); i++) nodes[i] = list.get(i);
+    public IteratedLocalSearch(Graph graph, long timeLimitMillis) {
+        this.graph = graph;
+        this.timeLimitMillis = timeLimitMillis;
+        this.random = new Random(12345);
     }
 
-    public int[] runIteratedLocalSearch() {
+    public void solve() {
+        long startTime = System.currentTimeMillis();
 
-        long end = System.currentTimeMillis() + timeLimitMs;
+        int initialK = graph.getNumberOfUsedColors();
+        int[] currentColors = Arrays.copyOf(graph.getColorArray(), graph.getTotalVertices());
 
-        int[] sol = g.getColorArray().clone();
-        int[] best = sol.clone();
+        int[] bestGlobalColors = Arrays.copyOf(currentColors, currentColors.length);
+        int bestK = initialK;
 
-        fixConflictsGreedy(sol);
-        fixConflictsGreedy(best);
+        // System.out.println("ILS Start: Initial K = " + bestK);
 
-        int bestK = countColors(best);
+        while (System.currentTimeMillis() - startTime < timeLimitMillis) {
 
-        while (System.currentTimeMillis() < end) {
+            int targetK = bestK - 1;
 
-            localSearch(sol);
+            // 1. Hard Stop: Impossible to color with less than 1 color
+            if (targetK < 1) break;
 
-            int k = countColors(sol);
-            if (k < bestK) {
-                System.arraycopy(sol, 0, best, 0, sol.length);
-                bestK = k;
+            // 2. Hard Stop: Impossible to color with 1 color if edges exist
+            if (targetK == 1 && graph.getNumberOfEdges() > 0) break;
+
+            int[] workingColors = squashColors(bestGlobalColors, bestK, targetK);
+            SolutionState state = new SolutionState(graph, workingColors, targetK);
+
+            // 3. Run Tabu Search with strict limits
+            boolean solved = runTabuSearch(state, startTime);
+
+            if (solved) {
+                bestK = targetK;
+                bestGlobalColors = Arrays.copyOf(state.colors, state.colors.length);
+                applySolutionToGraph(bestGlobalColors);
+                // System.out.println("Found valid coloring for k=" + bestK);
             } else {
-                if (rng.nextDouble() > ACCEPT_WORSE_PROB)
-                    System.arraycopy(best, 0, sol, 0, sol.length);
-            }
-
-            perturb(sol);
-            fixConflictsGreedy(sol);
-        }
-
-        compactColors(best);
-        return best;
-    }
-
-
-    // ---------------------- Local Search --------------------------
-
-    private void localSearch(int[] colors) {
-
-        int noImprove = 0;
-        int currentConf = countConflicts(colors);
-
-        while (noImprove < MAX_LOCAL_NO_IMPROVE) {
-
-            boolean improved = false;
-
-            // Simple recoloring
-            if (recolorSingle(colors)) {
-                int newConf = countConflicts(colors);
-                if (newConf < currentConf) {
-                    currentConf = newConf;
-                    improved = true;
-                }
-            }
-
-            // Try Kempe move only if no improvement
-            if (!improved && kempeMove(colors)) {
-                int newConf = countConflicts(colors);
-                if (newConf < currentConf) {
-                    currentConf = newConf;
-                    improved = true;
-                }
-            }
-
-            if (improved) noImprove = 0;
-            else noImprove++;
-        }
-
-        compactColors(colors);
-    }
-
-
-    private boolean recolorSingle(int[] colors) {
-
-        // Shuffle cached node array
-        shuffleArray(nodes);
-
-        boolean improved = false;
-
-        for (int v : nodes) {
-            int old = colors[v];
-
-            // try smaller colors first
-            for (int c = 1; c < old; c++) {
-                if (isColorAllowed(v, c, colors)) {
-                    colors[v] = c;
-                    improved = true;
-                    break;
-                }
+                // If we failed to color for targetK after trying hard (max perturbations),
+                // we assume optimal K is reached.
+                break;
             }
         }
-        return improved;
     }
 
+    private void applySolutionToGraph(int[] colors) {
+        for (int i = 0; i < colors.length; i++) {
+            if (graph.isActive(i)) {
+                graph.colorNode(i, colors[i]);
+            }
+        }
+    }
 
-    private boolean kempeMove(int[] colors) {
+    private int[] squashColors(int[] validColors, int oldK, int newK) {
+        int[] newColors = Arrays.copyOf(validColors, validColors.length);
+        for (int i = 0; i < newColors.length; i++) {
+            if (!graph.isActive(i)) continue;
+            if (newColors[i] >= newK) {
+                newColors[i] = random.nextInt(newK);
+            }
+        }
+        return newColors;
+    }
 
-        shuffleArray(nodes);
+    private boolean runTabuSearch(SolutionState state, long startTime) {
+        int[][] tabuMatrix = new int[graph.getTotalVertices()][state.k];
+        long iterations = 0;
+        long lastImprovementIter = 0;
+        int bestConflicts = state.totalConflicts;
 
-        for (int v : nodes) {
-            int cv = colors[v];
+        // Count how many times we've tried to "kick" the solution
+        int perturbationCount = 0;
 
-            for (int target = 1; target < cv; target++) {
+        // Scale max iterations based on graph size (small graphs finish fast, large graphs get more time)
+        // For your test cases (size < 100), this prevents spinning for 10 seconds.
+        long maxTotalIterations = 10000L * Math.max(graph.getNumberOfNodes(), 10);
 
-                // Build Kempe chain
-                BitSet visited = new BitSet(colors.length);
-                ArrayDeque<Integer> stack = new ArrayDeque<>();
+        while (System.currentTimeMillis() - startTime < timeLimitMillis) {
 
-                stack.push(v);
-                visited.set(v);
+            if (state.totalConflicts == 0) return true;
 
-                while (!stack.isEmpty()) {
-                    int x = stack.pop();
-                    BitSet nbrs = g.adj[x];
+            // NEW: Safety Break for impossible K
+            if (perturbationCount >= MAX_PERTURBATIONS_PER_K) return false;
+            if (iterations > maxTotalIterations) return false;
 
-                    for (int u = nbrs.nextSetBit(0); u >= 0; u = nbrs.nextSetBit(u + 1)) {
-                        int cu = colors[u];
-                        if (cu != cv && cu != target) continue;
-                        if (!visited.get(u)) {
-                            visited.set(u);
-                            stack.push(u);
+            // Perturbation Condition
+            if (iterations - lastImprovementIter > MAX_ITERATIONS_WITHOUT_IMPROVEMENT) {
+                perturb(state);
+                tabuMatrix = new int[graph.getTotalVertices()][state.k];
+                lastImprovementIter = iterations;
+                perturbationCount++; // Increment "give up" counter
+            }
+
+            int bestNode = -1;
+            int bestColor = -1;
+            int bestDelta = Integer.MAX_VALUE;
+
+            int conflictCount = state.getConflictingNodesCount();
+            int tabuTenure = random.nextInt(A) + (int)(DELTA * conflictCount);
+
+            List<Integer> conflictList = state.getConflictingNodes();
+            List<Move> equalMoves = new ArrayList<>();
+
+            for (int u : conflictList) {
+                int oldColor = state.colors[u];
+                for (int c = 0; c < state.k; c++) {
+                    if (c == oldColor) continue;
+
+                    int delta = state.adjCounts[u][c] - state.adjCounts[u][oldColor];
+                    boolean isTabu = (tabuMatrix[u][c] > iterations);
+
+                    if (isTabu && (state.totalConflicts + delta < bestConflicts)) {
+                        isTabu = false;
+                    }
+
+                    if (!isTabu) {
+                        if (delta < bestDelta) {
+                            bestNode = u;
+                            bestColor = c;
+                            bestDelta = delta;
+                            equalMoves.clear();
+                            equalMoves.add(new Move(u, c));
+                        } else if (delta == bestDelta) {
+                            equalMoves.add(new Move(u, c));
                         }
                     }
                 }
-
-                // Simulate swap cheaply
-                int oldConf = countConflicts(colors);
-                int[] temp = colors.clone();
-
-                for (int u = visited.nextSetBit(0); u >= 0; u = visited.nextSetBit(u + 1)) {
-                    temp[u] = (temp[u] == cv) ? target : cv;
-                }
-
-                if (countConflicts(temp) <= oldConf) {
-                    System.arraycopy(temp, 0, colors, 0, colors.length);
-                    return true;
-                }
             }
+
+            if (!equalMoves.isEmpty()) {
+                Move chosen = equalMoves.get(random.nextInt(equalMoves.size()));
+                int oldC = state.colors[chosen.u];
+                tabuMatrix[chosen.u][oldC] = (int)(iterations + tabuTenure);
+                state.updateColor(chosen.u, chosen.c);
+                if (state.totalConflicts < bestConflicts) {
+                    bestConflicts = state.totalConflicts;
+                    lastImprovementIter = iterations;
+                    // Reset perturbation count on improvement
+                    // because we are making progress!
+                    perturbationCount = 0;
+                }
+            } else {
+                perturb(state);
+                tabuMatrix = new int[graph.getTotalVertices()][state.k];
+                perturbationCount++;
+            }
+            iterations++;
         }
         return false;
     }
 
+    private void perturb(SolutionState state) {
+        Set<Integer> targetClasses = new HashSet<>();
+        while(targetClasses.size() < Math.min(PERTURBATION_STRENGTH, state.k)) {
+            targetClasses.add(random.nextInt(state.k));
+        }
 
-    // ---------------------- Repair and Perturbation --------------------------
+        List<Integer> nodesToMove = new ArrayList<>();
+        for (int v : graph.getNodes()) {
+            if (targetClasses.contains(state.colors[v])) {
+                nodesToMove.add(v);
+            }
+        }
 
-    private void fixConflictsGreedy(int[] colors) {
-        boolean changed = true;
+        for (int v : nodesToMove) {
+            int oldColor = state.colors[v];
+            int bestC = -1;
+            int minConf = Integer.MAX_VALUE;
+            int startC = random.nextInt(state.k);
 
-        while (changed) {
-            changed = false;
-
-            for (int v : nodes) {
-                BitSet nbrs = g.adj[v];
-                int cv = colors[v];
-
-                for (int u = nbrs.nextSetBit(0); u >= 0; u = nbrs.nextSetBit(u + 1)) {
-                    if (colors[u] == cv) {
-                        int newc = 1;
-                        while (!isColorAllowed(v, newc, colors)) newc++;
-                        colors[v] = newc;
-                        changed = true;
-                    }
+            for (int i = 0; i < state.k; i++) {
+                int c = (startC + i) % state.k;
+                if (c == oldColor) continue;
+                int conf = state.adjCounts[v][c];
+                if (conf < minConf) {
+                    minConf = conf;
+                    bestC = c;
                 }
             }
+            if (bestC != -1) state.updateColor(v, bestC);
         }
-        compactColors(colors);
     }
 
+    private static class SolutionState {
+        int[] colors;
+        int[][] adjCounts;
+        int totalConflicts;
+        int k;
+        Graph graph;
 
-    private void perturb(int[] colors) {
+        SolutionState(Graph g, int[] initColors, int k) {
+            this.graph = g;
+            this.k = k;
+            this.colors = Arrays.copyOf(initColors, initColors.length);
+            this.adjCounts = new int[g.getTotalVertices()][k];
+            this.totalConflicts = 0;
 
-        int numNodes = nodes.length;
-        int target = (int)(PERTURB_FRACTION * numNodes);
-
-        // Bucket colors ↓
-        Map<Integer, List<Integer>> buckets = new HashMap<>();
-        for (int v : nodes) {
-            buckets.computeIfAbsent(colors[v], x -> new ArrayList<>()).add(v);
+            for (int u : g.getNodes()) {
+                for (int v : g.getNeighborsOf(u)) {
+                    adjCounts[u][colors[v]]++;
+                }
+            }
+            for (int u : g.getNodes()) {
+                totalConflicts += adjCounts[u][colors[u]];
+            }
+            totalConflicts /= 2;
         }
 
-        // Sort by class size
-        List<List<Integer>> sorted = new ArrayList<>(buckets.values());
-        sorted.sort((a, b) -> b.size() - a.size());
-
-        int removed = 0;
-        for (List<Integer> cls : sorted) {
-            Collections.shuffle(cls, rng);
-            for (int v : cls) {
-                if (removed >= target) return;
-                colors[v] = -1;
-                removed++;
+        void updateColor(int u, int newColor) {
+            int oldColor = colors[u];
+            totalConflicts = totalConflicts - adjCounts[u][oldColor] + adjCounts[u][newColor];
+            colors[u] = newColor;
+            for (int v : graph.getNeighborsOf(u)) {
+                adjCounts[v][oldColor]--;
+                adjCounts[v][newColor]++;
             }
         }
-    }
 
-
-    // ---------------------- Utilities --------------------------
-
-    private int countConflicts(int[] c) {
-        int conflicts = 0;
-
-        for (int v : nodes) {
-            int cv = c[v];
-            BitSet nbrs = g.adj[v];
-
-            for (int u = nbrs.nextSetBit(0); u >= 0; u = nbrs.nextSetBit(u + 1))
-                if (c[u] == cv) conflicts++;
-        }
-
-        return conflicts;
-    }
-
-
-    private boolean isColorAllowed(int v, int col, int[] colors) {
-        BitSet nbrs = g.adj[v];
-        for (int u = nbrs.nextSetBit(0); u >= 0; u = nbrs.nextSetBit(u + 1))
-            if (colors[u] == col) return false;
-        return true;
-    }
-
-
-    private int countColors(int[] c) {
-        BitSet used = new BitSet();
-        for (int v : nodes) used.set(c[v]);
-        return used.cardinality();
-    }
-
-
-    private void compactColors(int[] c) {
-        Map<Integer,Integer> map = new HashMap<>();
-        int next = 1;
-
-        for (int v : nodes) {
-            int col = c[v];
-            Integer remap = map.get(col);
-            if (remap == null) {
-                remap = next++;
-                map.put(col, remap);
+        List<Integer> getConflictingNodes() {
+            List<Integer> list = new ArrayList<>();
+            for (int u : graph.getNodes()) {
+                if (adjCounts[u][colors[u]] > 0) list.add(u);
             }
-            c[v] = remap;
+            return list;
+        }
+
+        int getConflictingNodesCount() {
+            int count = 0;
+            for (int u : graph.getNodes()) {
+                if (adjCounts[u][colors[u]] > 0) count++;
+            }
+            return count;
         }
     }
 
-
-    // Fisher-Yates shuffle on primitive int array
-    private void shuffleArray(int[] arr) {
-        for (int i = arr.length - 1; i > 0; i--) {
-            int j = rng.nextInt(i + 1);
-            int tmp = arr[i];
-            arr[i] = arr[j];
-            arr[j] = tmp;
-        }
+    private static class Move {
+        int u, c;
+        Move(int u, int c) { this.u = u; this.c = c; }
     }
 }
