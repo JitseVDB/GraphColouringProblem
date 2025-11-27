@@ -40,7 +40,6 @@ class RecursiveLargestFirstTest {
         // Apply RLF algorithm
         graph.applyConstructionHeuristic();
 
-
         // Verify coloring is proper: no two neighbors share the same color
         for (int node : graph.getNodes()) {
             int color = graph.getColor(node);
