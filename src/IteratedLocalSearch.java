@@ -7,18 +7,90 @@ public class IteratedLocalSearch {
     private final Random random;
 
     // Parameters
-    private static final int TABU_TENURE_BASE = 10;
-    private static final double TABU_TENURE_MULTI = 0.6;
+    private final int TABU_TENURE_BASE;
+    private final double TABU_TENURE_MULTI;
     // Lowered slightly: if we don't improve in 1000 iter on a small graph, we are stuck.
-    private static final int MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 1500;
+    private final int MAX_ITERATIONS_WITHOUT_IMPROVEMENT;
 
     // Safety
-    private static final int MAX_PERTURBATIONS_PER_K = 100;
+    private final int MAX_PERTURBATIONS_PER_K;
 
+    // Constructor with parameter inputs
+    public IteratedLocalSearch(Graph graph, long timeLimitMillis,
+                               int tabuTenureBase,
+                               double tabuTenureMulti,
+                               int maxIterationsWithoutImprovement,
+                               int maxPerturbationsPerK) {
+        this.graph = graph;
+        this.timeLimitMillis = timeLimitMillis;
+        this.random = new Random(12345);
+
+        this.TABU_TENURE_BASE = tabuTenureBase;
+        this.TABU_TENURE_MULTI = tabuTenureMulti;
+        this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = maxIterationsWithoutImprovement;
+        this.MAX_PERTURBATIONS_PER_K = maxPerturbationsPerK;
+    }
+
+    /**
+     * Auto-Config Constructor:
+     * Calculates Density and Size to automatically select the best parameter logic.
+     */
     public IteratedLocalSearch(Graph graph, long timeLimitMillis) {
         this.graph = graph;
         this.timeLimitMillis = timeLimitMillis;
         this.random = new Random(12345);
+
+        // 1. Calculate Graph Metrics
+        int n = graph.getTotalVertices();
+        int e = graph.getNumberOfEdges();
+
+        // Safety check to avoid division by zero
+        double density = (n > 1) ? (2.0 * e) / (double) (n * (n - 1)) : 0.0;
+
+        // 2. Logic Cascade to set Parameters directly
+
+        // CASE: PATIENT (High Density)
+        // Very dense graphs have tight constraints and short cycles.
+        // We need high tenure to prevent cycling and high iterations to dig deep.
+        if (density >= 0.75) {
+            this.TABU_TENURE_BASE = 20;
+            this.TABU_TENURE_MULTI = 0.8;
+            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 4000;
+            this.MAX_PERTURBATIONS_PER_K = 50;
+            System.out.println("Mode: PATIENT (High Density: " + String.format("%.2f", density) + ")");
+        }
+
+        // CASE: HIGH NOISE (Large Scale or Medium-Dense Traps)
+        // Large graphs (wap) or medium-dense structures (latin square) have deep local optima.
+        // We need massive perturbations (300) to kick the solver out of traps.
+        else if (n > 1500 || (n > 800 && density > 0.5)) {
+            this.TABU_TENURE_BASE = 12;
+            this.TABU_TENURE_MULTI = 0.6;
+            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 800;
+            this.MAX_PERTURBATIONS_PER_K = 300;
+            System.out.println("Mode: HIGH NOISE (Large/Complex Graph)");
+        }
+
+        // CASE: AGGRESSIVE (Sparse or Small)
+        // Sparse or small graphs are easy to traverse. Speed is key.
+        // We restart frequently (low iterations) and move fast (low tenure).
+        else if (density < 0.2 || n < 300) {
+            this.TABU_TENURE_BASE = 5;
+            this.TABU_TENURE_MULTI = 0.4;
+            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 500;
+            this.MAX_PERTURBATIONS_PER_K = 200;
+            System.out.println("Mode: AGGRESSIVE (Sparse/Small Graph)");
+        }
+
+        // CASE: BALANCED (The Middle Ground)
+        // For standard random graphs (DSJC...5) where no extreme strategy dominates.
+        else {
+            this.TABU_TENURE_BASE = 10;
+            this.TABU_TENURE_MULTI = 0.6;
+            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 1500;
+            this.MAX_PERTURBATIONS_PER_K = 100;
+            System.out.println("Mode: BALANCED (Standard Random Graph)");
+        }
     }
 
     public void solve() {

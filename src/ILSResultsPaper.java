@@ -38,7 +38,7 @@ public class ILSResultsPaper {
     }
 
     // Map of graph name -> GraphResult
-    private static final Map<String, GraphResult> ilsResults = new HashMap<>();
+    public static final Map<String, GraphResult> ilsResults = new HashMap<>();
 
     static {
         // DSJC series
