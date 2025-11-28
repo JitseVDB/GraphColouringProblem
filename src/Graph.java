@@ -554,7 +554,7 @@ public class Graph implements GraphInterface {
     @Override
     public void applyStochasticLocalSearchAlgorithm() {
         // 1. Define a time limit (e.g., 60 seconds or based on benchmark rules)
-        long timeLimitMillis = 10000; // 10 seconds for now
+        long timeLimitMillis = 300000; // 10 seconds for now
 
         // 2. Create the solver
         IteratedLocalSearch ils = new IteratedLocalSearch(this, timeLimitMillis);
@@ -590,5 +590,14 @@ public class Graph implements GraphInterface {
      */
     public int[] getDegreesCopy() {
         return Arrays.copyOf(degree, degree.length);
+    }
+
+    /**
+     * CRITICAL PERFORMANCE METHOD.
+     * Returns the raw internal BitSet for neighbors.
+     * WARNING: Do not modify the returned BitSet from outside this class.
+     */
+    public BitSet getAdjacencyRules(int v) {
+        return adj[v];
     }
 }

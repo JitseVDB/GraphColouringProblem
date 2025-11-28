@@ -1,31 +1,19 @@
 import java.util.*;
 
-/**
- * Optimized Iterated Local Search (ILS) with Tabu Search.
- *
- * Optimizations:
- * 1. Incremental Conflict Tracking: SolutionState now tracks conflicting nodes in a Set.
- * This avoids O(N) scans every iteration, making move evaluation O(|Conflicts| * K).
- * 2. Smart Squash: When reducing colors, nodes are moved to the 'least bad' available color
- * instead of a random one.
- * 3. Adaptive Limits: Iteration counts are tuned to be responsive on small graphs
- * and persistent on large graphs.
- */
 public class IteratedLocalSearch {
 
     private final Graph graph;
     private final long timeLimitMillis;
-
-    // Algorithm Parameters
-    private static final int TABU_TENURE_BASE = 15; // Slightly increased for stability
-    private static final double TABU_TENURE_MULTI = 0.6;
-    private static final int MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 2500;
-    private static final int PERTURBATION_STRENGTH = 4; // Kick harder when stuck
-
-    // Safety breaks
-    private static final int MAX_PERTURBATIONS_PER_K = 75;
-
     private final Random random;
+
+    // Parameters
+    private static final int TABU_TENURE_BASE = 10;
+    private static final double TABU_TENURE_MULTI = 0.6;
+    // Lowered slightly: if we don't improve in 1000 iter on a small graph, we are stuck.
+    private static final int MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 1500;
+
+    // Safety
+    private static final int MAX_PERTURBATIONS_PER_K = 100;
 
     public IteratedLocalSearch(Graph graph, long timeLimitMillis) {
         this.graph = graph;
@@ -39,39 +27,37 @@ public class IteratedLocalSearch {
         int initialK = graph.getNumberOfUsedColors();
         int[] currentColors = Arrays.copyOf(graph.getColorArray(), graph.getTotalVertices());
 
-        // Ensure the graph has the colors loaded
         if (initialK == 0) {
-            // Fallback if graph wasn't colored yet
             initialK = graph.getNumberOfNodes();
             for(int i=0; i<graph.getTotalVertices(); i++) currentColors[i] = i;
         }
 
-        int[] bestGlobalColors = Arrays.copyOf(currentColors, currentColors.length);
+        // Apply a quick cleanup to the input colors before starting
+        // (Sometimes RLF leaves valid colors but poorly distributed)
+        applySolutionToGraph(currentColors);
+
         int bestK = initialK;
+        int[] bestGlobalColors = Arrays.copyOf(currentColors, currentColors.length);
 
         while (System.currentTimeMillis() - startTime < timeLimitMillis) {
-
             int targetK = bestK - 1;
-
-            // Hard Stops
             if (targetK < 1) break;
-            if (targetK == 1 && graph.getNumberOfEdges() > 0) break;
 
-            // OPTIMIZATION: Smart Squash instead of Random
+            // 1. Reduce K: Squash colors
             int[] workingColors = smartSquashColors(bestGlobalColors, bestK, targetK);
 
+            // 2. Build High-Performance State
             SolutionState state = new SolutionState(graph, workingColors, targetK);
 
-            // Run Tabu Search
+            // 3. Run Tabu Search
             boolean solved = runTabuSearch(state, startTime);
 
             if (solved) {
                 bestK = targetK;
                 bestGlobalColors = Arrays.copyOf(state.colors, state.colors.length);
                 applySolutionToGraph(bestGlobalColors);
+                // System.out.println("Improved to k=" + bestK + " Time: " + (System.currentTimeMillis() - startTime) + "ms");
             } else {
-                // If we couldn't solve for K-1 within the time budget/perturbation limits,
-                // we assume the previous K was the optimum found.
                 break;
             }
         }
@@ -79,51 +65,41 @@ public class IteratedLocalSearch {
 
     private void applySolutionToGraph(int[] colors) {
         for (int i = 0; i < colors.length; i++) {
-            if (graph.isActive(i)) {
-                graph.colorNode(i, colors[i]);
-            }
+            if (graph.isActive(i)) graph.colorNode(i, colors[i]);
         }
     }
 
-    /**
-     * Smart Squash: Moves nodes from removed color class to the best possible
-     * existing color (min conflicts), rather than random.
-     */
     private int[] smartSquashColors(int[] validColors, int oldK, int newK) {
         int[] newColors = Arrays.copyOf(validColors, validColors.length);
-
-        // Identify nodes that need moving (those with color >= newK)
         List<Integer> nodesToMove = new ArrayList<>();
+
         for (int i = 0; i < newColors.length; i++) {
             if (graph.isActive(i) && newColors[i] >= newK) {
                 nodesToMove.add(i);
             }
         }
-
-        // Shuffle them to prevent bias order
         Collections.shuffle(nodesToMove, random);
 
-        // Access raw adjacency for speed
         Map<Integer, BitSet> adj = graph.getAdjCopy();
 
+        // Greedy placement for squashed nodes
         for (int u : nodesToMove) {
-            int bestColor = -1;
+            int bestColor = 0;
             int minConflicts = Integer.MAX_VALUE;
 
-            // Try all valid colors 0..newK-1
-            for (int c = 0; c < newK; c++) {
+            // Random start index to avoid packing color 0
+            int startC = random.nextInt(newK);
+
+            for (int i = 0; i < newK; i++) {
+                int c = (startC + i) % newK;
                 int conflicts = 0;
                 BitSet neighbors = adj.get(u);
                 for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
-                    if (newColors[v] == c) {
-                        conflicts++;
-                    }
+                    if (newColors[v] == c) conflicts++;
                 }
-
                 if (conflicts < minConflicts) {
                     minConflicts = conflicts;
                     bestColor = c;
-                    // Early exit if 0 conflict found
                     if (conflicts == 0) break;
                 }
             }
@@ -133,63 +109,63 @@ public class IteratedLocalSearch {
     }
 
     private boolean runTabuSearch(SolutionState state, long startTime) {
-        int[][] tabuMatrix = new int[graph.getTotalVertices()][state.k];
+        // Tabu Matrix: Stores the iteration number UNTIL which a move is tabu
+        // Flattened for performance [node * k + color]
+        int[] tabuMatrix = new int[graph.getTotalVertices() * state.k];
+
         long iterations = 0;
         long lastImprovementIter = 0;
         int bestConflicts = state.totalConflicts;
         int perturbationCount = 0;
 
-        // Adaptive Max Iterations:
-        // Small graphs (fast iterations) get more loops.
-        // Large graphs (slow iterations) get fewer loops, but we rely on the time limit.
-        long maxTotalIterations = 20000L * (long)Math.sqrt(graph.getNumberOfNodes());
+        // More iterations for smaller graphs (they run faster), fewer for massive ones
+        long maxTotalIterations = 100000L;
 
         while (System.currentTimeMillis() - startTime < timeLimitMillis) {
-
             if (state.totalConflicts == 0) return true;
 
-            // Check Limits
-            if (perturbationCount >= MAX_PERTURBATIONS_PER_K) return false;
-            // Only enforce max iterations if we really aren't improving
-            if (iterations > maxTotalIterations && perturbationCount > 5) return false;
-
-            // Perturbation Logic
+            // Perturbation check
             if (iterations - lastImprovementIter > MAX_ITERATIONS_WITHOUT_IMPROVEMENT) {
+                if (perturbationCount >= MAX_PERTURBATIONS_PER_K) return false;
+
                 perturb(state);
-                // Reset Tabu memory after perturbation to allow freedom
-                tabuMatrix = new int[graph.getTotalVertices()][state.k];
+                Arrays.fill(tabuMatrix, 0); // Reset memory
                 lastImprovementIter = iterations;
                 perturbationCount++;
             }
 
+            // --- CRITICAL PERFORMANCE SECTION ---
+
             int bestNode = -1;
             int bestColor = -1;
             int bestDelta = Integer.MAX_VALUE;
+            int tieCount = 0;
 
-            // OPTIMIZATION: Only iterate over known conflicting nodes.
-            // This set is maintained incrementally by SolutionState.
-            // On a 1000-node graph with 5 conflicts, this is 200x faster than scanning all nodes.
-            Set<Integer> conflictingNodes = state.getConflictingNodes();
+            // Fast iteration over conflict set (No Iterator objects created)
+            int conflictCount = state.getConflictCount();
+            int[] conflictArr = state.getConflictingNodesArray();
+            int k = state.k;
+            int totalV = graph.getTotalVertices();
 
-            // Dynamic Tabu Tenure
-            int tabuTenure = random.nextInt(TABU_TENURE_BASE) + (int)(TABU_TENURE_MULTI * conflictingNodes.size());
+            // Dynamic Tenure based on conflict size
+            int tabuTenure = TABU_TENURE_BASE + (int)(TABU_TENURE_MULTI * conflictCount);
 
-            // Evaluate Moves
-            List<Move> equalMoves = new ArrayList<>(); // To randomize ties
-
-            for (int u : conflictingNodes) {
+            for (int i = 0; i < conflictCount; i++) {
+                int u = conflictArr[i];
                 int oldColor = state.colors[u];
+                int uOffset = u * k; // Precompute offset for flattened array
 
-                // Try moving conflicting node u to every other color
-                for (int c = 0; c < state.k; c++) {
+                // Check all colors
+                for (int c = 0; c < k; c++) {
                     if (c == oldColor) continue;
 
-                    // Delta = (Conflicts if we move to C) - (Conflicts at current oldColor)
-                    // We want the most negative delta (largest reduction)
-                    int delta = state.adjCounts[u][c] - state.adjCounts[u][oldColor];
+                    // Fast Lookup in flattened array
+                    int delta = state.adjCounts[uOffset + c] - state.adjCounts[uOffset + oldColor];
 
-                    // Aspiration Criteria: Ignore tabu if it improves global best
-                    boolean isTabu = (tabuMatrix[u][c] > iterations);
+                    // Check Tabu
+                    boolean isTabu = tabuMatrix[uOffset + c] > iterations;
+
+                    // Aspiration
                     if (isTabu && (state.totalConflicts + delta < bestConflicts)) {
                         isTabu = false;
                     }
@@ -199,187 +175,195 @@ public class IteratedLocalSearch {
                             bestNode = u;
                             bestColor = c;
                             bestDelta = delta;
-                            equalMoves.clear();
-                            equalMoves.add(new Move(u, c));
+                            tieCount = 1;
                         } else if (delta == bestDelta) {
-                            equalMoves.add(new Move(u, c));
+                            // Reservoir Sampling: Avoid creating a List<Move>
+                            tieCount++;
+                            if (random.nextInt(tieCount) == 0) {
+                                bestNode = u;
+                                bestColor = c;
+                            }
                         }
                     }
                 }
             }
 
-            if (!equalMoves.isEmpty()) {
-                // Execute best move
-                Move chosen = equalMoves.get(random.nextInt(equalMoves.size()));
-                int oldC = state.colors[chosen.u];
+            if (bestNode != -1) {
+                int oldC = state.colors[bestNode];
 
-                // Set Tabu
-                tabuMatrix[chosen.u][oldC] = (int)(iterations + tabuTenure);
+                // Update Tabu (flattened index)
+                tabuMatrix[bestNode * k + oldC] = (int)(iterations + tabuTenure);
 
-                // Update State
-                state.updateColor(chosen.u, chosen.c);
+                state.updateColor(bestNode, bestColor);
 
                 if (state.totalConflicts < bestConflicts) {
                     bestConflicts = state.totalConflicts;
                     lastImprovementIter = iterations;
-                    perturbationCount = 0; // We are making progress, reset "give up" counter
+                    perturbationCount = 0;
                 }
             } else {
-                // No valid non-tabu moves found (rare, but possible in tight constraints)
+                // Dead end (all moves Tabu)
                 perturb(state);
                 lastImprovementIter = iterations;
-                perturbationCount++;
             }
+
             iterations++;
         }
         return false;
     }
 
     private void perturb(SolutionState state) {
-        // Targeted Perturbation:
-        // Pick a few conflicting nodes and force them to random colors.
+        int conflictCount = state.getConflictCount();
+        if (conflictCount == 0) return;
 
-        Set<Integer> conflicts = state.getConflictingNodes();
-        if (conflicts.isEmpty()) return;
+        int[] conflictArr = state.getConflictingNodesArray();
 
-        // FIX: Create a copy of the set to avoid ConcurrentModificationException.
-        // We cannot iterate over 'conflicts' while 'updateColor' is modifying it.
-        List<Integer> candidates = new ArrayList<>(conflicts);
+        // Strength: if 1 conflict, kick hard. If 100, kick soft.
+        int kickStrength = Math.max(1, Math.min(conflictCount, 4));
 
-        // Shuffle to ensure we kick random conflicting nodes, not just the first ones in the Set
-        Collections.shuffle(candidates, random);
+        for (int i = 0; i < kickStrength; i++) {
+            // Pick random conflict
+            int idx = random.nextInt(conflictCount);
+            int u = conflictArr[idx];
 
-        int kickSize = Math.min(candidates.size(), PERTURBATION_STRENGTH);
-
-        // 1. Kick conflicting nodes (using the safe copy)
-        for (int i = 0; i < kickSize; i++) {
-            int u = candidates.get(i);
+            // Force random color
             int newC = random.nextInt(state.k);
-
-            // Ensure we actually pick a different color
-            if (newC == state.colors[u]) {
-                newC = (newC + 1) % state.k;
-            }
+            if (newC == state.colors[u]) newC = (newC + 1) % state.k;
 
             state.updateColor(u, newC);
         }
 
-        // 2. Kick a random active node to shake structure
-        // (This helps escape local optima even if we fixed the specific conflicts above)
-        int randomNode = random.nextInt(graph.getTotalVertices());
-        // Find a valid active node (simple loop protection)
-        for(int i=0; i<100; i++) {
-            if (graph.isActive(randomNode)) break;
-            randomNode = random.nextInt(graph.getTotalVertices());
-        }
-
-        if (graph.isActive(randomNode)) {
+        // Also kick one random non-conflicting node to change topology
+        int rnd = random.nextInt(graph.getTotalVertices());
+        if (graph.isActive(rnd)) {
             int newC = random.nextInt(state.k);
-            if (newC == state.colors[randomNode]) {
-                newC = (newC + 1) % state.k;
-            }
-            state.updateColor(randomNode, newC);
+            if (newC != state.colors[rnd]) state.updateColor(rnd, newC);
         }
     }
 
     /**
-     * Inner class representing the solution state.
-     * Maintains adjacency counts and total conflicts incrementally.
+     * Highly Optimized State Class.
+     * Uses flattened arrays and O(1) Set operations.
      */
     private static class SolutionState {
-        int[] colors;
-        // adjCounts[u][c] = number of neighbors of u that have color c
-        int[][] adjCounts;
-        int totalConflicts;
-        int k;
-        Graph graph;
+        final Graph graph;
+        final int k;
+        final int[] colors;
 
-        // Optimisation: Incremental Set of conflicting nodes
-        private final Set<Integer> conflictingNodes;
+        // Flattened Adjacency Counts: adjCounts[u * k + c]
+        // This improves cache locality significantly over int[][]
+        final int[] adjCounts;
+
+        int totalConflicts;
+
+        // Custom "Set" implementation using arrays for O(1) random access and iteration
+        // WITHOUT Integer object allocation.
+        private final int[] conflictingNodes;
+        private final int[] nodeIndices; // Maps nodeID -> index in conflictingNodes
+        private int conflictCount;
 
         SolutionState(Graph g, int[] initColors, int k) {
             this.graph = g;
             this.k = k;
             this.colors = Arrays.copyOf(initColors, initColors.length);
-            this.adjCounts = new int[g.getTotalVertices()][k];
-            this.totalConflicts = 0;
-            this.conflictingNodes = new HashSet<>();
 
-            // Initial full scan (happens once per K)
+            int numNodes = g.getTotalVertices();
+            this.adjCounts = new int[numNodes * k];
+            this.conflictingNodes = new int[numNodes];
+            this.nodeIndices = new int[numNodes];
+            Arrays.fill(nodeIndices, -1);
+            this.conflictCount = 0;
+
+            // Initial Scan
             for (int u : g.getNodes()) {
                 int uColor = colors[u];
-                for (int v : g.getNeighborsOf(u)) {
-                    adjCounts[u][colors[v]]++;
+                BitSet neighbors = g.getAdjacencyRules(u); // Direct BitSet Access
+
+                int uOffset = u * k;
+
+                for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
+                    adjCounts[uOffset + colors[v]]++;
                 }
-                // If u has conflicts (neighbors with same color), add to tracking set
-                if (adjCounts[u][uColor] > 0) {
-                    conflictingNodes.add(u);
+
+                if (adjCounts[uOffset + uColor] > 0) {
+                    addConflict(u);
                 }
             }
 
-            // Calc total conflicts (sum of all conflict degrees / 2)
-            int sum = 0;
-            for (int u : conflictingNodes) {
-                sum += adjCounts[u][colors[u]];
+            // Calculate initial global conflict
+            long sum = 0;
+            for (int i = 0; i < conflictCount; i++) {
+                int u = conflictingNodes[i];
+                sum += adjCounts[u * k + colors[u]];
             }
-            totalConflicts = sum / 2;
+            this.totalConflicts = (int)(sum / 2);
         }
 
-        /**
-         * The critical bottleneck optimization.
-         * Updates all data structures incrementally when node u changes to newColor.
-         */
+        // O(1) Add to Set
+        private void addConflict(int u) {
+            if (nodeIndices[u] == -1) {
+                conflictingNodes[conflictCount] = u;
+                nodeIndices[u] = conflictCount;
+                conflictCount++;
+            }
+        }
+
+        // O(1) Remove from Set (Swap with last element)
+        private void removeConflict(int u) {
+            int idx = nodeIndices[u];
+            if (idx != -1) {
+                int lastNode = conflictingNodes[conflictCount - 1];
+
+                // Move last node to the empty slot
+                conflictingNodes[idx] = lastNode;
+                nodeIndices[lastNode] = idx;
+
+                // Clear last slot
+                nodeIndices[u] = -1;
+                conflictCount--;
+            }
+        }
+
+        int getConflictCount() { return conflictCount; }
+        int[] getConflictingNodesArray() { return conflictingNodes; }
+
         void updateColor(int u, int newColor) {
             int oldColor = colors[u];
+            int uOffset = u * k;
 
-            // 1. Update Global Conflict Count
-            // Remove old conflicts of u, add new conflicts of u
-            totalConflicts = totalConflicts - adjCounts[u][oldColor] + adjCounts[u][newColor];
+            // 1. Update Global Conflicts
+            int oldConflicts = adjCounts[uOffset + oldColor];
+            int newConflicts = adjCounts[uOffset + newColor];
+            totalConflicts = totalConflicts - oldConflicts + newConflicts;
 
-            // 2. Update Color Array
             colors[u] = newColor;
 
-            // 3. Update 'u' in Conflicting Set
-            // If u now has conflicts, add it. If not, remove it.
-            if (adjCounts[u][newColor] > 0) {
-                conflictingNodes.add(u);
-            } else {
-                conflictingNodes.remove(u);
-            }
+            // 2. Update Conflict Set for U
+            if (newConflicts > 0) addConflict(u);
+            else removeConflict(u);
 
-            // 4. Update Neighbors
-            // We must update the adjCounts for all neighbors, AND check if their conflict status changed.
-            for (int v : graph.getNeighborsOf(u)) {
+            // 3. Update Neighbors
+            // We iterate strictly over neighbors.
+            BitSet neighbors = graph.getAdjacencyRules(u);
+            for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
+                int vOffset = v * k;
 
-                // v had u as a neighbor of color 'oldColor'. It lost that.
-                adjCounts[v][oldColor]--;
+                // v lost a neighbor of oldColor
+                adjCounts[vOffset + oldColor]--;
 
-                // Check v's status regarding oldColor
-                // If v was colored 'oldColor', it just LOST a conflict with u.
+                // Did v lose a conflict?
                 if (colors[v] == oldColor) {
-                    if (adjCounts[v][oldColor] == 0) {
-                        conflictingNodes.remove(v);
-                    }
+                    if (adjCounts[vOffset + oldColor] == 0) removeConflict(v);
                 }
 
-                // v now has u as a neighbor of color 'newColor'. It gained that.
-                adjCounts[v][newColor]++;
+                // v gained a neighbor of newColor
+                adjCounts[vOffset + newColor]++;
 
-                // Check v's status regarding newColor
-                // If v is colored 'newColor', it just GAINED a conflict with u.
+                // Did v gain a conflict?
                 if (colors[v] == newColor) {
-                    conflictingNodes.add(v);
+                    addConflict(v);
                 }
             }
         }
-
-        Set<Integer> getConflictingNodes() {
-            return conflictingNodes;
-        }
-    }
-
-    private static class Move {
-        int u, c;
-        Move(int u, int c) { this.u = u; this.c = c; }
     }
 }
