@@ -19,10 +19,8 @@ public class IteratedLocalSearch {
      * CONSTRUCTOR 1: MANUAL CONFIGURATION
      * Use this if you want to perform grid searches or manual tuning.
      */
-    public IteratedLocalSearch(Graph graph, long timeLimitMillis,
-                               int tabuTenureBase,
-                               double tabuTenureMulti,
-                               int maxIterationsWithoutImprovement,
+    public IteratedLocalSearch(Graph graph, long timeLimitMillis, int tabuTenureBase,
+                               double tabuTenureMulti, int maxIterationsWithoutImprovement,
                                int maxPerturbationsPerK) {
         this.graph = graph;
         this.timeLimitMillis = timeLimitMillis;
@@ -53,7 +51,7 @@ public class IteratedLocalSearch {
         this.fastAdj = buildFastAdj(graph);
 
         // 2. Calculate Metrics
-        int n = graph.getTotalVertices();
+        int n = graph.getTotalNodes();
         int e = graph.getNumberOfEdges();
         // Density formula: 2E / (V * (V-1))
         double density = (n > 1) ? (2.0 * e) / (double) (n * (n - 1)) : 0.0;
@@ -120,7 +118,7 @@ public class IteratedLocalSearch {
      * This ensures O(1) adjacency iteration.
      */
     private int[][] buildFastAdj(Graph graph) {
-        int n = graph.getTotalVertices();
+        int n = graph.getTotalNodes();
         int[][] adj = new int[n][];
         for (int i = 0; i < n; i++) {
             if (graph.isActive(i)) {
@@ -141,11 +139,11 @@ public class IteratedLocalSearch {
     public void solve() {
         long startTime = System.currentTimeMillis();
 
-        int initialK = graph.getNumberOfUsedColors();
-        int[] currentColors = Arrays.copyOf(graph.getColorArray(), graph.getTotalVertices());
+        int initialK = graph.getColorCount();
+        int[] currentColors = Arrays.copyOf(graph.getColorArray(), graph.getTotalNodes());
 
         if (initialK == 0) {
-            initialK = graph.getTotalVertices();
+            initialK = graph.getTotalNodes();
             for (int i = 0; i < currentColors.length; i++) currentColors[i] = i;
         }
 
@@ -232,7 +230,7 @@ public class IteratedLocalSearch {
     }
 
     private boolean runTabuSearch(SolutionState state, long startTime) {
-        int[] tabuMatrix = new int[graph.getTotalVertices() * state.k];
+        int[] tabuMatrix = new int[graph.getTotalNodes() * state.k];
         long iterations = 0;
         long lastImprovementIter = 0;
         int bestConflicts = state.totalConflicts;
@@ -347,7 +345,7 @@ public class IteratedLocalSearch {
         }
 
         // Random topology kick
-        int rnd = random.nextInt(graph.getTotalVertices());
+        int rnd = random.nextInt(graph.getTotalNodes());
         if (graph.isActive(rnd)) {
             int newC = random.nextInt(state.k);
             if (newC != state.colors[rnd]) state.updateColor(rnd, newC);

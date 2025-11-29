@@ -51,7 +51,7 @@ class IteratedLocalSearchTest {
         assertTrue(graph.isValidColoring(), "Coloring should be valid after ILS");
 
         // Cube can be 2-colored (bipartite)
-        int usedColors = graph.getNumberOfUsedColors();
+        int usedColors = graph.getColorCount();
         System.out.println("ILS reduced to " + usedColors + " colors");
         assertTrue(usedColors <= 2, "ILS should reduce coloring to optimal or near-optimal number of colors");
     }
@@ -78,7 +78,7 @@ class IteratedLocalSearchTest {
         assertTrue(graph.isValidColoring(), "Coloring should be valid after ILS");
 
         // Check number of colors used (should be <= 3 ideally for this graph)
-        int usedColors = graph.getNumberOfUsedColors();
+        int usedColors = graph.getColorCount();
         System.out.println("ILS reduced to " + usedColors + " colors");
         assertTrue(usedColors <= 3, "ILS should reduce coloring to near-optimal number of colors");
     }
@@ -105,7 +105,7 @@ class IteratedLocalSearchTest {
         assertTrue(graph.isValidColoring(), "Coloring should be valid after ILS");
 
         // Optimal coloring should be 3 colors (2 triangles)
-        int usedColors = graph.getNumberOfUsedColors();
+        int usedColors = graph.getColorCount();
         System.out.println("ILS reduced to " + usedColors + " colors");
         assertTrue(usedColors <= 3, "ILS should reduce coloring to near-optimal number of colors");
     }

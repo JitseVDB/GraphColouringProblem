@@ -44,7 +44,7 @@ public class GraphMetricsPrinter {
                 Graph g = new Graph();
                 g.loadDIMACS(f.getPath());
 
-                int n = g.getTotalVertices();
+                int n = g.getTotalNodes();
                 int e = g.getNumberOfEdges();
 
                 // Density formula for undirected graph: 2*E / (V * (V-1))

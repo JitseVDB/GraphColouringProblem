@@ -185,7 +185,7 @@ public class DeepParameterTuner {
             long endILS = System.currentTimeMillis();
 
             // Clean up
-            int k = g.getNumberOfUsedColors();
+            int k = g.getColorCount();
             g = null; ils = null;
 
             return new RunResult(params, k, (endILS - startILS));

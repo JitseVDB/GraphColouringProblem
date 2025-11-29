@@ -129,7 +129,7 @@ public class ParameterTuner {
             Graph g = new Graph();
             g.loadDIMACS(filePath);
 
-            int nodes = g.getTotalVertices();
+            int nodes = g.getTotalNodes();
             int edges = g.getNumberOfEdges();
 
             // 1. Start Total Timer
@@ -158,7 +158,7 @@ public class ParameterTuner {
             long ilsDuration = endObj - startILS;
             long totalDuration = endObj - startTotal;
 
-            int k = g.getNumberOfUsedColors();
+            int k = g.getColorCount();
 
             g = null;
             ils = null;

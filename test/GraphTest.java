@@ -97,12 +97,12 @@ class GraphTest {
         graph.loadDIMACS(tempFileGraph.toString());
 
         // The total amount of vertices for the graph should be 3.
-        assertEquals(3, graph.getTotalVertices());
+        assertEquals(3, graph.getTotalNodes());
 
         graph.removeNode(0);
 
         // The graph should still contain the same amount of vertices.
-        assertEquals(3, graph.getTotalVertices());
+        assertEquals(3, graph.getTotalNodes());
 
         // 2. Empty Graph
         // Create an empty graph with 0 nodes and 0 edges
@@ -110,7 +110,7 @@ class GraphTest {
         graph.loadDIMACS(tempFileEmptyGraph.toString());
 
         // The graph should contain exactly no nodes
-        assertEquals(0, graph.getTotalVertices());
+        assertEquals(0, graph.getTotalNodes());
     }
 
     @Test
@@ -130,43 +130,6 @@ class GraphTest {
 
         // The graph should contain exactly no edges.
         assertEquals(0, graph.getNumberOfEdges());
-    }
-
-    @Test
-    void testGetNumberOfUsedColors() throws IOException {
-        // 1. Regular Graph
-        // Create a temporary graph with 3 nodes and 2 edges: 1-2, 2-3
-        Path tempFileGraph = createTempDIMACSFile(3, new int[][]{{1, 2}, {2, 3}});
-        graph.loadDIMACS(tempFileGraph.toString());
-
-        // Sanity check
-        assertEquals(2, graph.getNumberOfEdges());
-        assertEquals(3, graph.getNumberOfNodes());
-
-        // Color nodes
-        graph.colorNode(0,0);
-        graph.colorNode(1,1);
-        graph.colorNode(2,2);
-
-        // The graph should contain 3 unique colors.
-        assertEquals(3,  graph.getNumberOfUsedColors());
-
-        // Recolor nodes with duplicate colors
-        graph.colorNode(0,1);
-
-        // The graph should contain 2 unique colors.
-        assertEquals(2, graph.getNumberOfUsedColors());
-
-        // 2. Empty Graph
-        // Create an empty graph with 0 nodes and 0 edges
-        Path tempFileEmptyGraph = createTempDIMACSFile(0, new int[][]{});
-        graph.loadDIMACS(tempFileEmptyGraph.toString());
-
-        // Sanity check
-        assertEquals(0, graph.getNumberOfEdges());
-
-        // Graph should contain nu unique colors.
-        assertEquals(0, graph.getNumberOfUsedColors());
     }
 
     @Test

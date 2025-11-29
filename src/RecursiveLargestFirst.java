@@ -25,7 +25,7 @@ public class RecursiveLargestFirst {
 
     public RecursiveLargestFirst(Graph graph, double P) {
         this.graph = graph;
-        this.n = graph.getTotalVertices();
+        this.n = graph.getTotalNodes();
         this.colors = new int[n];
         Arrays.fill(this.colors, -1);
         this.colorCount = 0;

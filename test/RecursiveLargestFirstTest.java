@@ -50,7 +50,7 @@ class RecursiveLargestFirstTest {
         }
 
         // Path graph of length 3 should need only 2 colors
-        assertEquals(2, graph.getNumberOfUsedColors());
+        assertEquals(2, graph.getColorCount());
     }
 
     @Test
@@ -74,7 +74,7 @@ class RecursiveLargestFirstTest {
         }
 
         // Triangle graph should use exactly 3 colors
-        assertEquals(3, graph.getNumberOfUsedColors());
+        assertEquals(3, graph.getColorCount());
     }
 
     @Test
@@ -98,7 +98,7 @@ class RecursiveLargestFirstTest {
         }
 
         // Square (cycle of length 4) should only need 2 colors
-        assertEquals(2, graph.getNumberOfUsedColors());
+        assertEquals(2, graph.getColorCount());
     }
 
     @Test
@@ -108,7 +108,7 @@ class RecursiveLargestFirstTest {
 
         assertDoesNotThrow(() -> graph.applyConstructionHeuristic());
         assertEquals(0, graph.getNumberOfNodes());
-        assertEquals(0, graph.getNumberOfUsedColors());
+        assertEquals(0, graph.getColorCount());
     }
 
     @Test
@@ -132,6 +132,6 @@ class RecursiveLargestFirstTest {
         }
 
         // The disconnected part should only contain 2 nodes
-        assertEquals(2, graph.getNumberOfUsedColors());
+        assertEquals(2, graph.getColorCount());
     }
 }

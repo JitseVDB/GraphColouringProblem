@@ -3,36 +3,77 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
 
-// TODO: Add safeguard to ensure all graphs are valid.
-// TODO: In reduction I assume we should keep track of nodes and edges to restore later.
-// TODO: Finish documentation apply... methods.
-// TODO: Currently RLF is unaware of deleted nodes and assumes every node is active.
-// TODO: Check how edges connecting non-existent nodes get handled.
-// TODO: Rewrite testApplyReduction to accomodate k replacing w(G).
-// TODO: Fix ILS (!)
-
 /**
  * A class representing graphs.
  *
  * @author  Jitse Vandenberghe
- *
  * @version 1.0
  */
 public class Graph implements GraphInterface {
-    public BitSet[] adj;          // adjacency[i] = neighbors of i
-    private int[] degree;         // cached degrees
-    private int[] color;          // node colors
-    private BitSet active;        // which vertices are still in the graph
-    private int totalVertices;    // original number of vertices
-    private int verticeCount;     // number of vertices
-    private int edgeCount;        // number of edges
-    private int colorCount;       // number of colors
+
+    /**
+     * Array of bit sets representing the adjacency structure of the graph.
+     *
+     * Each position in the array corresponds to a node in the graph.
+     * The element at index i contains a BitSet in which each bit position j
+     * indicates whether node j is a neighbor of node i.
+     * A bit set to 1 means that an edge exists between node i and node j.
+     * A bit set to 0 means that the nodes are not directly connected.
+     */
+    public BitSet[] adj;
+
+    /**
+     * Array of integers representing the degree of each node.
+     *
+     * Each position in the array corresponds to a node in the graph.
+     * The value at index i stores the number of neighbors of node i.
+     */
+    private int[] degree;
+
+    /**
+     * Array of integers storing the colors assigned to the nodes.
+     *
+     * Each position in the array corresponds to a node in the graph.
+     * The value at index i stores the color assigned to node i.
+     * colors are represented by integer identifiers.
+     */
+    private int[] color;
+
+    /**
+     * Bit set indicating which nodes are currently active.
+     *
+     * Each bit corresponds to a node in the graph.
+     * A bit set to 1 means that the node is active.
+     * A bit set to 0 means that the node is inactive or has been removed.
+     */
+    private BitSet active;
+
+    /**
+     * The total number of nodes in the original graph.
+     */
+    private int totalNodes;
+
+    /**
+     * The current number of active nodes in the graph.
+     */
+    private int nodeCount;
+
+    /**
+     * The current number of edges in the graph.
+     */
+    private int edgeCount;
+
+    /**
+     * The number of distinct colors used in the coloring of the graph.
+     */
+    private int colorCount;
+
 
     // Load DIMACS .col file into adj BitSets (0-based)
     public void loadDIMACS(String filename) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
             String line;
-            verticeCount = 0;
+            nodeCount = 0;
             edgeCount = 0;
             colorCount = 0;
 
@@ -42,17 +83,17 @@ public class Graph implements GraphInterface {
 
                 if (line.startsWith("p")) {
                     String[] parts = line.split("\\s+");
-                    verticeCount = Integer.parseInt(parts[2]);
-                    totalVertices = verticeCount;
-                    adj = new BitSet[verticeCount];
-                    degree = new int[verticeCount];
-                    color = new int[verticeCount];
-                    active = new BitSet(verticeCount);
+                    nodeCount = Integer.parseInt(parts[2]);
+                    totalNodes = nodeCount;
+                    adj = new BitSet[nodeCount];
+                    degree = new int[nodeCount];
+                    color = new int[nodeCount];
+                    active = new BitSet(nodeCount);
 
-                    for (int i = 0; i < verticeCount; i++) {
-                        adj[i] = new BitSet(verticeCount);
+                    for (int i = 0; i < nodeCount; i++) {
+                        adj[i] = new BitSet(nodeCount);
                         color[i] = -1;      // uncolored
-                        active.set(i);       // mark all vertices as active
+                        active.set(i);       // mark all nodes as active
                     }
                 } else if (line.startsWith("e")) {
                     String[] parts = line.split("\\s+");
@@ -72,7 +113,10 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns a collection of active nodes (0-based).
+     * Returns a collection of all active nodes (0-based).
+     *
+     * @return An unmodifiable collection containing all active nodes.
+     *         | for each v in result: active.get(v)
      */
     @Override
     public Collection<Integer> getNodes() {
@@ -85,22 +129,31 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns the number of nodes.
+     * Returns the current number of active nodes in the graph.
+     *
+     * @return The number of active nodes.
+     *         | result == nodeCount
      */
     @Override
     public int getNumberOfNodes() {
-        return verticeCount;
+        return nodeCount;
     }
 
     /**
-     * Returns the original number of nodes.
+     * Returns the number of nodes in the original graph.
+     *
+     * @return The total number of nodes initially present.
+     *         | result == totalNodes
      */
-    public int getTotalVertices() {
-        return totalVertices;
+    public int getTotalNodes() {
+        return totalNodes;
     }
 
     /**
-     * Returns the number of edges.
+     * Returns the number of edges in the graph.
+     *
+     * @return The number of edges.
+     *         | result == edgeCount
      */
     @Override
     public int getNumberOfEdges() {
@@ -108,7 +161,10 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns the number of unique colors.
+     * Returns the number of distinct colors currently used in the graph.
+     * Uncolored nodes (color -1) are ignored.
+     *
+     * @return The number of unique colors among all colored nodes.
      */
     public int getNumberOfUsedColors() {
         BitSet used = new BitSet();
@@ -127,16 +183,15 @@ public class Graph implements GraphInterface {
      *          The node whose neighbors are requested (0-based).
      *
      * @return  A read-only collection containing all nodes adjacent to v.
-     *          | result != null
-     *          | forall n in result: adj[v].get(n)
+     *          | for each n in result: adj[v].get(n)
      *
      * @throws  IllegalArgumentException
-     *          If the node does not exist in the graph
-     *          | v < 0 || v >= totalVertices || !active.get(v)
+     *          If the node does not exist or is inactive.
+     *          | v < 0 || v >= totalNodes || !active.get(v)
      */
     @Override
     public Collection<Integer> getNeighborsOf(int v) {
-        if (v < 0 || v >= totalVertices || !active.get(v)) {
+        if (v < 0 || v >= totalNodes || !active.get(v)) {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
 
@@ -150,24 +205,26 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Check whether the given nodes are neighbors (i.e., connected by an edge).
+     * Checks whether the given nodes are neighbors (i.e. connected by an edge).
      *
      * @param   u
-     *          The first node to check (0-based).
+     *          The first node (0-based).
      *
      * @param   v
-     *          The second node to check (0-based).
+     *          The second node (0-based).
      *
-     * @return  True if both nodes exist and are neighbors.
-     *          | result == (0 <= u < totalVertices && 0 <= v < totalVertices && adj[u].get(v))
+     * @return  True if both nodes exist, are active, and have an edge between them.
+     *          | result == (active.get(u) && active.get(v) && adj[u].get(v))
      *
      * @throws  IllegalArgumentException
-     *          If either u or v does not exist in the graph.
-     *          | u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(v) || !active.get(u)
+     *          If either node does not exist or is inactive.
+     *          | u < 0 || u >= totalNodes
+     *          | v < 0 || v >= totalNodes
+     *          | !active.get(u) || !active.get(v)
      */
     @Override
     public boolean areNeighbors(int u, int v) {
-        if (u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(v) || !active.get(u)) {
+        if (u < 0 || u >= totalNodes || v < 0 || v >= totalNodes || !active.get(v) || !active.get(u)) {
             throw new IllegalArgumentException(
                     "Both nodes must exist in the graph: u=" + u + ", v=" + v
             );
@@ -177,24 +234,23 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Check wether the given node is active (i.e. not deleted).
+     * Checks whether the given node is active.
      *
      * @param   v
-     *          The node to check (0-based)
+     *          The node to check (0-based).
      *
-     * @return  True if the node is active, false if it is deleted/inactive.
-     *          | result == (active.get(v))
+     * @return  True if the node is active, false otherwise.
+     *          | result == active.get(v)
      *
      * @throws  IllegalArgumentException
-     *          If either u or v does not exist in the graph.
-     *          | v < 0 || v >= totalVertices
+     *          If the node index is invalid.
+     *          | v < 0 || v >= totalNodes
      */
     public boolean isActive(int v) {
-        if (v < 0 || v >= totalVertices) {
+        if (v < 0 || v >= totalNodes) {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
-
-        return  active.get(v);
+        return active.get(v);
     }
 
     /**
@@ -203,16 +259,16 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The node whose degree is requested (0-based).
      *
-     * @return  The number of neighbors of node v if the node exists.
-     *          | result == (0 <= v < totalVertices ? adj[v].cardinality() : throw)
+     * @return  The number of neighbors of node v.
+     *          | result == adj[v].cardinality()
      *
      * @throws  IllegalArgumentException
-     *          If the node does not exist in the graph.
-     *          | v < 0 || v >= totalVertices || !active.get(v)
+     *          If the node does not exist or is inactive.
+     *          | v < 0 || v >= totalNodes || !active.get(v)
      */
     @Override
     public int getDegree(int v) {
-        if (v < 0 || v >= totalVertices || !active.get(v)) {
+        if (v < 0 || v >= totalNodes || !active.get(v)) {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
 
@@ -221,26 +277,20 @@ public class Graph implements GraphInterface {
 
     /**
      * Returns the saturation degree of the given node.
-     * The saturation degree is defined as the number of distinct colors
-     * assigned to the neighbors of that node.
+     * The saturation degree is the number of distinct colors assigned to
+     * its colored neighbors. Uncolored neighbors (color -1) are ignored.
      *
      * @param   v
-     *          The node whose saturation degree is to be computed (0-based).
+     *          The node whose saturation degree is requested (0-based).
      *
-     * @return  The number of unique colors among all colored neighbors of the given node.
-     *          Uncolored neighbors (with color -1) are ignored.
-     *          | result ==
-     *          |     (the number of distinct c such that
-     *          |         exists neighbor i where adj[v].get(i) == true :
-     *          |             color[i] != -1 &&
-     *          |             c == color[i])
+     * @return  The number of different colors used by colored neighbors.
      *
      * @throws  IllegalArgumentException
-     *          If the given node does not exist in the graph.
-     *          | v < 0 || v >= totalVertices || !active.get(v)
+     *          If the node does not exist or is inactive.
+     *          | v < 0 || v >= totalNodes || !active.get(v)
      */
     public int getSaturationDegree(int v) {
-        if (v < 0 || v >= totalVertices || !active.get(v)) {
+        if (v < 0 || v >= totalNodes || !active.get(v)) {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
 
@@ -258,27 +308,30 @@ public class Graph implements GraphInterface {
 
     /**
      * Returns the color assigned to the given node.
-     * If the node is uncolored, this method returns -1.
+     * Uncolored nodes have color -1.
      *
      * @param   v
      *          The node whose color is requested (0-based).
      *
-     * @return  The color assigned to the given node, or -1 if the node is uncolored.
-     *          | result == (0 <= v < totalVertices ? color[v] : throw)
+     * @return  The color of the node, or -1 if uncolored.
+     *          | result == color[v]
      *
      * @throws  IllegalArgumentException
-     *          If the node does not exist in the graph.
-     *          | v < 0 || v >= totalVertices || !active.get(v)
+     *          If the node does not exist or is inactive.
+     *          | v < 0 || v >= totalNodes || !active.get(v)
      */
     @Override
     public int getColor(int v) {
-        if (v < 0 || v >= totalVertices || !active.get(v)) {
+        if (v < 0 || v >= totalNodes || !active.get(v)) {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
 
         return color[v];
     }
 
+    /**
+     * Returns the internal color array.
+     */
     public int[] getColorArray() {
         return color;
     }
@@ -293,14 +346,14 @@ public class Graph implements GraphInterface {
      *          The color to assign.
      *
      * @throws  IllegalArgumentException
-     *          If the node does not exist in the graph or is inactive.
-     *          | v < 0 || v >= totalVertices || !active.get(v)
+     *          If the node does not exist or is inactive.
+     *          | v < 0 || v >= totalNodes || !active.get(v)
      *
-     * @effect  The color of the given node v is updated in the color array to the given color.
+     * @effect  The color of node v is updated.
      *          | this.color[v] == color
      */
     public void colorNode(int v, int color) {
-        if (v < 0 || v >= totalVertices || !active.get(v)) {
+        if (v < 0 || v >= totalNodes || !active.get(v)) {
             throw new IllegalArgumentException("Node " + v + " does not exist in the graph.");
         }
 
@@ -308,15 +361,13 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Resets the coloring of all active nodes in the graph.
-     * After this operation, all active nodes are considered uncolored.
+     * Resets the coloring of all active nodes.
+     * After this operation, all active nodes have color -1.
      *
-     * @effect  For every active node u in the graph, its color is set to -1.
-     *          | for each u where active.get(u):
-     *          |     color[u] == -1
+     * @effect  For every active node u, color[u] == -1.
      */
     public void resetColors() {
-        for (int u = 0; u < totalVertices; u++) {
+        for (int u = 0; u < totalNodes; u++) {
             if (active.get(u)) {
                 color[u] = -1;
             }
@@ -324,28 +375,31 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns the color count of the coloring of the graph.
+     * Returns the number of distinct colors currently used.
+     *
+     * @return The number of colors in use.
+     *         | result == colorCount
      */
     public int getColorCount() {
         return colorCount;
     }
 
     /**
-     * Checks if the current coloring of the graph is valid.
-     * A coloring is valid if no two adjacent nodes share the same color.
+     * Checks whether the current coloring is valid.
+     * A coloring is valid if no edge connects two nodes of the same color.
      *
-     * @return true if the coloring is valid, false otherwise
+     * @return True if the coloring is valid, false otherwise.
      */
     public boolean isValidColoring() {
         for (int u = active.nextSetBit(0); u >= 0; u = active.nextSetBit(u + 1)) {
             int colorU = color[u];
-            if (colorU == -1) continue; // skip uncolored nodes
+            if (colorU == -1) continue;
 
             BitSet neighbors = adj[u];
             for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
-                if (!active.get(v)) continue; // skip inactive nodes
+                if (!active.get(v)) continue;
                 if (color[v] == colorU) {
-                    return false; // conflict found
+                    return false;
                 }
             }
         }
@@ -353,34 +407,36 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Remove the given node from the graph, along with all edges connected to it.
-     * If the node does not exist or is inactive, this method throws an exception.
+     * Removes the given node from the graph, along with all edges incident to it.
+     * The node becomes inactive and cannot be used afterwards.
      *
      * @param   v
      *          The node to remove (0-based).
      *
-     * @effect  For all neighbors u of the given node v (stored as set bits in adj[v]),
-     *          the bit corresponding to v is cleared in u's adjacency BitSet, and the
-     *          degree of u and edgeCount are updated accordingly.
-     *          | for each u in adj[v].nextSetBit(0..):
-     *          |     adj[u].clear(v)
+     * @effect  For every active neighbor u of v, the edge (u, v) is removed:
+     *          | for each u where adj[v].get(u):
+     *          |     adj[u].get(v) == false
      *          |     degree[u] == old(degree[u]) - 1
-     *          | edgeCount == old(edgeCount) - degree[v]
+     *          | edgeCount == old(edgeCount) - old(degree[v])
      *
-     * @effect  The given node is marked as inactive.
-     *          | !active.get(v)
+     * @effect  Node v becomes inactive.
+     *          | active.get(v) == false
      *
-     * @effect  The given node's degree and color are reset.
+     * @effect  The adjacency of v is cleared, and its degree and color are reset.
+     *          | adj[v].cardinality() == 0
      *          | degree[v] == 0
      *          | color[v] == -1
      *
+     * @effect  The node count decreases by one.
+     *          | nodeCount == old(nodeCount) - 1
+     *
      * @throws  IllegalArgumentException
-     *          If v does not exist or is already inactive.
-     *          | v < 0 || v >= totalVertices || !active.get(v)
+     *          If v is invalid or already inactive.
+     *          | v < 0 || v >= totalNodes || !active.get(v)
      */
     @Override
     public void removeNode(int v) {
-        if (v < 0 || v >= totalVertices || !active.get(v)) {
+        if (v < 0 || v >= totalNodes || !active.get(v)) {
             throw new IllegalArgumentException("Node does not exist or is already removed: v=" + v);
         }
 
@@ -397,12 +453,12 @@ public class Graph implements GraphInterface {
         degree[v] = 0;
         color[v] = -1;
         active.clear(v); // mark as inactive
-        verticeCount--;
+        nodeCount--;
     }
 
     /**
-     * Adds an undirected edge between the given nodes u and v.
-     * Both nodes must already be active in the graph.
+     * Adds an undirected edge between nodes u and v.
+     * The edge is only added if it does not already exist.
      *
      * @param   u
      *          One endpoint of the edge (0-based).
@@ -410,25 +466,22 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The other endpoint of the edge (0-based).
      *
-     * @effect  The node v is added to the adjacency BitSet of u, and
-     *          the node u is added to the adjacency BitSet of v.
-     *          | adj[u].get(v) == true
-     *          | adj[v].get(u) == true
-     *
-     * @effect  The degrees of u and v are updated accordingly.
-     *          | degree[u] == old(degree[u]) + 1 (if edge was new)
-     *          | degree[v] == old(degree[v]) + 1 (if edge was new)
-     *
-     * @effect  The edge count is increased by one if the edge did not already exist.
-     *          | if (!old(adj[u]).get(v))
-     *          |     then edgeCount == old(edgeCount) + 1
+     * @effect  If the edge did not exist previously, both adjacency sets are updated:
+     *          | if !old(adj[u].get(v)):
+     *          |     adj[u].get(v) == true
+     *          |     adj[v].get(u) == true
+     *          |     degree[u] == old(degree[u]) + 1
+     *          |     degree[v] == old(degree[v]) + 1
+     *          |     edgeCount == old(edgeCount) + 1
      *
      * @throws  IllegalArgumentException
-     *          If either u or v does not exist or is inactive.
-     *          | u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(u) || !active.get(v)
+     *          If either node is invalid or inactive.
+     *          | u < 0 || u >= totalNodes
+     *          | v < 0 || v >= totalNodes
+     *          | !active.get(u) || !active.get(v)
      */
     private void addEdge(int u, int v) {
-        if (u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(u) || !active.get(v)) {
+        if (u < 0 || u >= totalNodes || v < 0 || v >= totalNodes || !active.get(u) || !active.get(v)) {
             throw new IllegalArgumentException(
                     "Both nodes must exist and be active before adding an edge: u=" + u + ", v=" + v
             );
@@ -445,7 +498,7 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Remove the edge between the given nodes u and v, if it exists.
+     * Removes the edge between nodes u and v.
      *
      * @param   u
      *          One endpoint of the edge (0-based).
@@ -453,26 +506,26 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The other endpoint of the edge (0-based).
      *
-     * @effect  If there exists an edge between u and v (represented in the adjacency BitSets),
-     *          the bits are cleared in both adjacency BitSets, and degrees and edgeCount are updated.
-     *          | if (adj[u].get(v))
-     *          |     then adj[u].get(v) == false &&
-     *          |          adj[v].get(u) == false &&
-     *          |          degree[u] == old(degree[u]) - 1 &&
-     *          |          degree[v] == old(degree[v]) - 1 &&
-     *          |          edgeCount == old(edgeCount) - 1
+     * @effect  If the edge exists, it is removed from both adjacency sets:
+     *          | adj[u].get(v) == false
+     *          | adj[v].get(u) == false
+     *          | degree[u] == old(degree[u]) - 1
+     *          | degree[v] == old(degree[v]) - 1
+     *          | edgeCount == old(edgeCount) - 1
      *
      * @throws  IllegalArgumentException
-     *          If either u or v does not exist or is inactive.
-     *          | u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(u) || !active.get(v)
+     *          If either node does not exist or is inactive.
+     *          | u < 0 || u >= totalNodes
+     *          | v < 0 || v >= totalNodes
+     *          | !active.get(u) || !active.get(v)
      *
      * @throws  IllegalArgumentException
-     *          If there is no edge between u and v.
-     *          | !adj[u].get(v) || !adj[v].get(u)
+     *          If no edge exists between u and v.
+     *          | !adj[u].get(v)
      */
     @Override
     public void removeEdge(int u, int v) {
-        if (u < 0 || u >= totalVertices || v < 0 || v >= totalVertices || !active.get(u) || !active.get(v)) {
+        if (u < 0 || u >= totalNodes || v < 0 || v >= totalNodes || !active.get(u) || !active.get(v)) {
             throw new IllegalArgumentException(
                     "Both nodes must exist and be active before removing an edge: u=" + u + ", v=" + v
             );
@@ -492,10 +545,9 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Applies a heuristic reduction to the graph by removing vertices whose
-     * degree is strictly less than the threshold. The threshold is determined
-     * as the size of the largest known clique in the graph, this can be applied
-     * by using our k from the initial coloring
+     * Applies a reduction heuristic that removes all nodes whose degree is
+     * strictly less than a threshold. The threshold is determined as the
+     * current number of used colors in the graph (k from the initial coloring).
      */
     @Override
     public void applyReduction() {
@@ -524,13 +576,24 @@ public class Graph implements GraphInterface {
             adj[v].clear();
             degree[v] = 0;
             active.clear(v);
-            verticeCount--;
+            nodeCount--;
         }
     }
 
+    /**
+     * Applies a constructive coloring heuristic based on the Recursive Largest
+     * First (RLF) algorithm. A fraction parameter controls the candidate set size.
+     * The coloring computed by RLF replaces the current coloring of the graph.
+     *
+     * @effect  The graph receives a new valid coloring.
+     *          | color[v] == rlfColors[v] for each active v
+     *
+     * @effect  The color count is updated.
+     *          | colorCount == getNumberOfUsedColors()
+     */
     @Override
     public void applyConstructionHeuristic() {
-        // 1. Choose a reasonable P (e.g., 0.2 for 20% of vertices as trial candidates)
+        // 1. Choose a reasonable P (e.g., 0.2 for 20% of nodes as trial candidates)
         double P = 0.2;
 
         // 2. Create RLF instance with this graph and P
@@ -547,9 +610,14 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Applies Iterated Local Search (ILS) with Tabu Search.
-     * This method assumes an initial coloring exists (e.g., from RLF).
-     * It will modify the graph's coloring in-place if a better solution is found.
+     * Applies Iterated Local Search (ILS) combined with Tabu Search to improve
+     * the current coloring. The method assumes an initial valid coloring already
+     * exists (e.g., from a constructive heuristic). Improvements are applied
+     * directly to the graph's coloring.
+     *
+     * @effect  If a better coloring (fewer colors) is found, the graph's colors
+     *          are updated accordingly.
+     *          | colorCount == getNumberOfUsedColors()
      */
     @Override
     public void applyStochasticLocalSearchAlgorithm() {
@@ -565,10 +633,16 @@ public class Graph implements GraphInterface {
         ils.solve();
 
         // 4. Update the internal colorCount cache of the Graph class
-        this.colorCount = this.getNumberOfUsedColors();
+        this.colorCount = this.getColorCount();
     }
 
-    // Helper methods to allow access to internal representation in other Classes
+    /**
+     * Returns a deep copy of the adjacency structure for all active nodes.
+     *
+     * @return A map from active nodes to clones of their adjacency BitSets.
+     *         | for each active v:
+     *         |     result.get(v) is a clone of adj[v]
+     */
     public Map<Integer, BitSet> getAdjCopy() {
         Map<Integer, BitSet> copy = new HashMap<>();
         for (int v = active.nextSetBit(0); v >= 0; v = active.nextSetBit(v + 1)) {
@@ -577,6 +651,13 @@ public class Graph implements GraphInterface {
         return copy;
     }
 
+    /**
+     * Returns a copy of the current coloring of all active nodes.
+     *
+     * @return A map from active nodes to their assigned color.
+     *         | for each active v:
+     *         |     result.get(v) == color[v]
+     */
     public Map<Integer, Integer> getColorsCopy() {
         Map<Integer, Integer> copy = new HashMap<>();
         for (int v = active.nextSetBit(0); v >= 0; v = active.nextSetBit(v + 1)) {
@@ -586,16 +667,23 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns a copy of the degrees of all vertices in the graph.
+     * Returns a copy of the internal degree array.
+     *
+     * @return A new array containing the degree of every node.
+     *         | result[i] == degree[i]
      */
     public int[] getDegreesCopy() {
         return Arrays.copyOf(degree, degree.length);
     }
 
     /**
-     * CRITICAL PERFORMANCE METHOD.
-     * Returns the raw internal BitSet for neighbors.
-     * WARNING: Do not modify the returned BitSet from outside this class.
+     * Returns the internal adjacency BitSet of node v.
+     *
+     * @param   v
+     *          The node whose adjacency BitSet is requested (0-based).
+     *
+     * @return  The raw BitSet storing neighbors of v.
+     *          | result == adj[v]
      */
     public BitSet getAdjacencyRules(int v) {
         return adj[v];
