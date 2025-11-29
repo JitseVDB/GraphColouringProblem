@@ -7,6 +7,7 @@ import java.util.*;
  * A class representing graphs.
  *
  * @author  Jitse Vandenberghe
+ *
  * @version 1.0
  */
 public class Graph implements GraphInterface {
@@ -69,7 +70,46 @@ public class Graph implements GraphInterface {
     private int colorCount;
 
 
-    // Load DIMACS .col file into adj BitSets (0-based)
+    /**
+     * Loads a graph from a DIMACS format file (.col).
+     * Initializes all internal data structures: adjacency representation,
+     * node activity, degrees, and colours.
+     *
+     * @param   filename
+     *          The path to the DIMACS file to be loaded.
+     *
+     * @effect  The number of nodes in the graph is set according to the
+     *          problem definition line ('p').
+     *          | nodeCount == declaredNodeCount
+     *          | totalNodes == nodeCount
+     *
+     * @effect  The adjacency structure, degree array, colour array and
+     *          activity BitSet are recreated to match the declared number
+     *          of nodes.
+     *          | adj.length == nodeCount
+     *          | degree.length == nodeCount
+     *          | color.length == nodeCount
+     *          | active.size() >= nodeCount
+     *
+     * @effect  All nodes are marked as active and initialized as uncoloured.
+     *          | for each i in 0..nodeCount-1 :
+     *          |     active.get(i) == true
+     *          |     color[i] == -1
+     *
+     * @effect  All edges defined by 'e' lines are inserted into the adjacency
+     *          representation. Duplicate edges in the file are ignored.
+     *          | for each edge (u,v) in the file :
+     *          |     adj[u].get(v) == true
+     *          |     adj[v].get(u) == true
+     *
+     * @effect  Node degrees and the global edge count are updated to match the
+     *          number of distinct edges defined in the file.
+     *          | degree[i] == number of neighbours of i
+     *          | edgeCount == number of distinct undirected edges
+     *
+     * @throws  IOException
+     *          If the file cannot be read or does not exist.
+     */
     public void loadDIMACS(String filename) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
             String line;
@@ -633,7 +673,7 @@ public class Graph implements GraphInterface {
         ils.solve();
 
         // 4. Update the internal colorCount cache of the Graph class
-        this.colorCount = this.getColorCount();
+        this.colorCount = this.getNumberOfUsedColors();
     }
 
     /**

@@ -1,5 +1,19 @@
 import java.util.*;
 
+/**
+ * A class implementing the Iterated Local Search (ILS) framework combined with
+ * tabu search for reducing the number of colors in a graph coloring.
+ *
+ * This algorithm attempts progressively smaller values of k and uses
+ * tabu-search-based local improvement, combined with perturbations, until no
+ * further improvement is possible within the given time limit.
+ *
+ * The implementation uses a fast adjacency structure and an optimized internal
+ * state representation for performance on large benchmark graphs.
+ *
+ * @author  Jitse Vandenberghe
+ * @version 1.0
+ */
 public class IteratedLocalSearch {
 
     private final Graph graph;
