@@ -64,21 +64,21 @@ public class ILSResultsPaper {
         ilsResults.put("flat1000_76_0", new GraphResult(89, 90, 188.7));
 
         // le450 series
-        ilsResults.put("le450-5a", new GraphResult(5, 5, 0.1));
-        ilsResults.put("le450-5b", new GraphResult(5, 5, 0.6));
-        ilsResults.put("le450-5d", new GraphResult(5, 5, 0));
-        ilsResults.put("le450-15a", new GraphResult(15, 15, 0.1));
-        ilsResults.put("le450-15b", new GraphResult(15, 15, 0.1));
-        ilsResults.put("le450-15c", new GraphResult(15, 15, 19.1));
-        ilsResults.put("le450-15d", new GraphResult(15, 15, 20.3));
-        ilsResults.put("le450-25c", new GraphResult(26, 26, 2));
-        ilsResults.put("le450-25d", new GraphResult(26, 26, 0.8));
+        ilsResults.put("le450_5a", new GraphResult(5, 5, 0.1));
+        ilsResults.put("le450_5b", new GraphResult(5, 5, 0.6));
+        ilsResults.put("le450_5d", new GraphResult(5, 5, 0));
+        ilsResults.put("le450_15a", new GraphResult(15, 15, 0.1));
+        ilsResults.put("le450_15b", new GraphResult(15, 15, 0.1));
+        ilsResults.put("le450_15c", new GraphResult(15, 15, 19.1));
+        ilsResults.put("le450_15d", new GraphResult(15, 15, 20.3));
+        ilsResults.put("le450_25c", new GraphResult(26, 26, 2));
+        ilsResults.put("le450_25d", new GraphResult(26, 26, 0.8));
 
         // latin_square
         ilsResults.put("latin_square_10", new GraphResult(103, 104, 510.4));
 
         // qg
-        ilsResults.put("qg_order100", new GraphResult(100, 100, 18.3));
+        ilsResults.put("qg.order100", new GraphResult(100, 100, 18.3));
 
         // queen series
         ilsResults.put("queen6_6", new GraphResult(7, 7, 0));

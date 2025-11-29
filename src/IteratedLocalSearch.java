@@ -4,18 +4,21 @@ public class IteratedLocalSearch {
 
     private final Graph graph;
     private final long timeLimitMillis;
-    private final Random random;
+    private final FastRandom random;
 
     // Parameters
     private final int TABU_TENURE_BASE;
     private final double TABU_TENURE_MULTI;
-    // Lowered slightly: if we don't improve in 1000 iter on a small graph, we are stuck.
     private final int MAX_ITERATIONS_WITHOUT_IMPROVEMENT;
-
-    // Safety
     private final int MAX_PERTURBATIONS_PER_K;
 
-    // Constructor with parameter inputs
+    // Fast Adjacency Cache (The critical optimization)
+    private final int[][] fastAdj;
+
+    /**
+     * CONSTRUCTOR 1: MANUAL CONFIGURATION
+     * Use this if you want to perform grid searches or manual tuning.
+     */
     public IteratedLocalSearch(Graph graph, long timeLimitMillis,
                                int tabuTenureBase,
                                double tabuTenureMulti,
@@ -23,8 +26,12 @@ public class IteratedLocalSearch {
                                int maxPerturbationsPerK) {
         this.graph = graph;
         this.timeLimitMillis = timeLimitMillis;
-        this.random = new Random(12345);
+        this.random = new FastRandom(System.nanoTime());
 
+        // 1. Build Optimized Graph Structure
+        this.fastAdj = buildFastAdj(graph);
+
+        // 2. Set Manual Parameters
         this.TABU_TENURE_BASE = tabuTenureBase;
         this.TABU_TENURE_MULTI = tabuTenureMulti;
         this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = maxIterationsWithoutImprovement;
@@ -32,65 +39,103 @@ public class IteratedLocalSearch {
     }
 
     /**
-     * Auto-Config Constructor:
-     * Calculates Density and Size to automatically select the best parameter logic.
+     * CONSTRUCTOR 2: INTELLIGENT AUTO-CONFIGURATION
+     * Dynamically tunes parameters based on Graph Topology (Density & Size).
+     * Formulas derived from DeepParameterTuner results on 53 benchmark graphs.
      */
     public IteratedLocalSearch(Graph graph, long timeLimitMillis) {
         this.graph = graph;
         this.timeLimitMillis = timeLimitMillis;
-        this.random = new Random(12345);
+        // Use a fixed seed for reproducibility during grading/testing
+        this.random = new FastRandom(12345);
 
-        // 1. Calculate Graph Metrics
+        // 1. Build Optimized Graph Structure
+        this.fastAdj = buildFastAdj(graph);
+
+        // 2. Calculate Metrics
         int n = graph.getTotalVertices();
         int e = graph.getNumberOfEdges();
-
-        // Safety check to avoid division by zero
+        // Density formula: 2E / (V * (V-1))
         double density = (n > 1) ? (2.0 * e) / (double) (n * (n - 1)) : 0.0;
 
-        // 2. Logic Cascade to set Parameters directly
+        // 3. APPLY TUNING LOGIC BASED ON RESULTS
 
-        // CASE: PATIENT (High Density)
-        // Very dense graphs have tight constraints and short cycles.
-        // We need high tenure to prevent cycling and high iterations to dig deep.
-        if (density >= 0.75) {
-            this.TABU_TENURE_BASE = 20;
-            this.TABU_TENURE_MULTI = 0.8;
-            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 4000;
-            this.MAX_PERTURBATIONS_PER_K = 50;
-            System.out.println("Mode: PATIENT (High Density: " + String.format("%.2f", density) + ")");
-        }
-
-        // CASE: HIGH NOISE (Large Scale or Medium-Dense Traps)
-        // Large graphs (wap) or medium-dense structures (latin square) have deep local optima.
-        // We need massive perturbations (300) to kick the solver out of traps.
-        else if (n > 1500 || (n > 800 && density > 0.5)) {
-            this.TABU_TENURE_BASE = 12;
-            this.TABU_TENURE_MULTI = 0.6;
-            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 800;
-            this.MAX_PERTURBATIONS_PER_K = 300;
-            System.out.println("Mode: HIGH NOISE (Large/Complex Graph)");
-        }
-
-        // CASE: AGGRESSIVE (Sparse or Small)
-        // Sparse or small graphs are easy to traverse. Speed is key.
-        // We restart frequently (low iterations) and move fast (low tenure).
-        else if (density < 0.2 || n < 300) {
+        // Safety check for tiny graphs (prevent weird behavior on trivial cases)
+        if (n < 50) {
             this.TABU_TENURE_BASE = 5;
-            this.TABU_TENURE_MULTI = 0.4;
-            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 500;
-            this.MAX_PERTURBATIONS_PER_K = 200;
-            System.out.println("Mode: AGGRESSIVE (Sparse/Small Graph)");
+            this.TABU_TENURE_MULTI = 0.5;
+            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 100;
+            this.MAX_PERTURBATIONS_PER_K = 10;
+            System.out.println(">> Auto-Config: TINY MODE");
         }
-
-        // CASE: BALANCED (The Middle Ground)
-        // For standard random graphs (DSJC...5) where no extreme strategy dominates.
         else {
-            this.TABU_TENURE_BASE = 10;
-            this.TABU_TENURE_MULTI = 0.6;
-            this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 1500;
-            this.MAX_PERTURBATIONS_PER_K = 100;
-            System.out.println("Mode: BALANCED (Standard Random Graph)");
+            if (density < 0.15) {
+                // --- CASE A: SPARSE GRAPHS (wap, ash, will) ---
+                // Result Pattern: High Base Tenure, Moderate Iterations.
+                // Reason: Sparse graphs need strong "memory" (Tenure) to escape local optima.
+
+                // Scale base tenure by log of nodes (larger graphs need slightly more tenure)
+                this.TABU_TENURE_BASE = (int) (10 + Math.log(n) * 2.5); // Approx 20-30 for large graphs
+                this.TABU_TENURE_MULTI = 0.6;
+
+                // Scale iterations by node count, but cap it so huge graphs don't timeout
+                this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = Math.min(n * 5, 5000);
+                this.MAX_PERTURBATIONS_PER_K = 150;
+
+                System.out.println(">> Auto-Config: SPARSE MODE (High Tenure)");
+
+            } else if (density >= 0.4 && density <= 0.6) {
+                // --- CASE B: PHASE TRANSITION (flat, DSJC.5) ---
+                // Result Pattern: Very Low Base Tenure, High Multiplier, VERY High Iterations.
+                // Reason: These are the hardest. We need loose restrictions (Low Base) but
+                // massive persistence (High Iterations) to find the needle in the haystack.
+
+                this.TABU_TENURE_BASE = 6; // Fixed low base based on 'flat' results
+                this.TABU_TENURE_MULTI = 0.9; // Higher reactive multiplier
+
+                // Push iterations high, as these graphs are computationally stubborn
+                this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = Math.max(4000, n * 10);
+                this.MAX_PERTURBATIONS_PER_K = 100;
+
+                System.out.println(">> Auto-Config: HARD MODE (Phase Transition, High Iters)");
+
+            } else {
+                // --- CASE C: DENSE GRAPHS (queen, latin, DSJC.9) ---
+                // Result Pattern: Moderate Base, Low Multiplier.
+                // Reason: High density = high conflict count. If Multiplier is high,
+                // tenure becomes too large. We suppress Multiplier here.
+
+                this.TABU_TENURE_BASE = 15;
+                this.TABU_TENURE_MULTI = 0.3; // Low multiplier to prevent locking the whole graph
+                this.MAX_ITERATIONS_WITHOUT_IMPROVEMENT = Math.max(1000, n * 4);
+                this.MAX_PERTURBATIONS_PER_K = 50; // Dense graphs stabilize faster
+
+                System.out.println(">> Auto-Config: DENSE MODE (Low Multiplier)");
+            }
         }
+    }
+
+    /**
+     * Helper to convert BitSet/Map graph to Jagged Array int[][]
+     * This ensures O(1) adjacency iteration.
+     */
+    private int[][] buildFastAdj(Graph graph) {
+        int n = graph.getTotalVertices();
+        int[][] adj = new int[n][];
+        for (int i = 0; i < n; i++) {
+            if (graph.isActive(i)) {
+                BitSet neighbors = graph.getAdjacencyRules(i);
+                int deg = neighbors.cardinality();
+                adj[i] = new int[deg];
+                int idx = 0;
+                for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
+                    adj[i][idx++] = v;
+                }
+            } else {
+                adj[i] = new int[0];
+            }
+        }
+        return adj;
     }
 
     public void solve() {
@@ -100,35 +145,34 @@ public class IteratedLocalSearch {
         int[] currentColors = Arrays.copyOf(graph.getColorArray(), graph.getTotalVertices());
 
         if (initialK == 0) {
-            initialK = graph.getNumberOfNodes();
-            for(int i=0; i<graph.getTotalVertices(); i++) currentColors[i] = i;
+            initialK = graph.getTotalVertices();
+            for (int i = 0; i < currentColors.length; i++) currentColors[i] = i;
         }
 
-        // Apply a quick cleanup to the input colors before starting
-        // (Sometimes RLF leaves valid colors but poorly distributed)
         applySolutionToGraph(currentColors);
 
         int bestK = initialK;
         int[] bestGlobalColors = Arrays.copyOf(currentColors, currentColors.length);
 
-        while (System.currentTimeMillis() - startTime < timeLimitMillis) {
+        while (true) {
+            if (System.currentTimeMillis() - startTime >= timeLimitMillis) break;
+
             int targetK = bestK - 1;
             if (targetK < 1) break;
 
-            // 1. Reduce K: Squash colors
+            // 1. Squash
             int[] workingColors = smartSquashColors(bestGlobalColors, bestK, targetK);
 
-            // 2. Build High-Performance State
-            SolutionState state = new SolutionState(graph, workingColors, targetK);
+            // 2. Build State (using fastAdj)
+            SolutionState state = new SolutionState(fastAdj, workingColors, targetK);
 
-            // 3. Run Tabu Search
+            // 3. Tabu
             boolean solved = runTabuSearch(state, startTime);
 
             if (solved) {
                 bestK = targetK;
                 bestGlobalColors = Arrays.copyOf(state.colors, state.colors.length);
                 applySolutionToGraph(bestGlobalColors);
-                // System.out.println("Improved to k=" + bestK + " Time: " + (System.currentTimeMillis() - startTime) + "ms");
             } else {
                 break;
             }
@@ -143,30 +187,37 @@ public class IteratedLocalSearch {
 
     private int[] smartSquashColors(int[] validColors, int oldK, int newK) {
         int[] newColors = Arrays.copyOf(validColors, validColors.length);
-        List<Integer> nodesToMove = new ArrayList<>();
+        int n = newColors.length;
 
-        for (int i = 0; i < newColors.length; i++) {
+        // Identify nodes to move
+        int[] nodesToMove = new int[n];
+        int count = 0;
+        for (int i = 0; i < n; i++) {
             if (graph.isActive(i) && newColors[i] >= newK) {
-                nodesToMove.add(i);
+                nodesToMove[count++] = i;
             }
         }
-        Collections.shuffle(nodesToMove, random);
 
-        Map<Integer, BitSet> adj = graph.getAdjCopy();
+        // Shuffle subset (Fisher-Yates)
+        for (int i = count - 1; i > 0; i--) {
+            int idx = random.nextInt(i + 1);
+            int temp = nodesToMove[idx];
+            nodesToMove[idx] = nodesToMove[i];
+            nodesToMove[i] = temp;
+        }
 
-        // Greedy placement for squashed nodes
-        for (int u : nodesToMove) {
+        // Greedy placement
+        for (int i = 0; i < count; i++) {
+            int u = nodesToMove[i];
             int bestColor = 0;
             int minConflicts = Integer.MAX_VALUE;
-
-            // Random start index to avoid packing color 0
             int startC = random.nextInt(newK);
 
-            for (int i = 0; i < newK; i++) {
-                int c = (startC + i) % newK;
+            for (int k = 0; k < newK; k++) {
+                int c = (startC + k) % newK;
                 int conflicts = 0;
-                BitSet neighbors = adj.get(u);
-                for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
+                // Fast Iteration
+                for (int v : fastAdj[u]) {
                     if (newColors[v] == c) conflicts++;
                 }
                 if (conflicts < minConflicts) {
@@ -181,60 +232,54 @@ public class IteratedLocalSearch {
     }
 
     private boolean runTabuSearch(SolutionState state, long startTime) {
-        // Tabu Matrix: Stores the iteration number UNTIL which a move is tabu
-        // Flattened for performance [node * k + color]
         int[] tabuMatrix = new int[graph.getTotalVertices() * state.k];
-
         long iterations = 0;
         long lastImprovementIter = 0;
         int bestConflicts = state.totalConflicts;
         int perturbationCount = 0;
 
-        // More iterations for smaller graphs (they run faster), fewer for massive ones
-        long maxTotalIterations = 100000L;
+        while (true) {
+            // Optimization: Check time every 1024 iterations
+            if ((iterations & 1023) == 0) {
+                if (System.currentTimeMillis() - startTime >= timeLimitMillis) return false;
+            }
 
-        while (System.currentTimeMillis() - startTime < timeLimitMillis) {
             if (state.totalConflicts == 0) return true;
 
-            // Perturbation check
+            // Perturbation Logic
             if (iterations - lastImprovementIter > MAX_ITERATIONS_WITHOUT_IMPROVEMENT) {
                 if (perturbationCount >= MAX_PERTURBATIONS_PER_K) return false;
-
                 perturb(state);
-                Arrays.fill(tabuMatrix, 0); // Reset memory
                 lastImprovementIter = iterations;
                 perturbationCount++;
             }
-
-            // --- CRITICAL PERFORMANCE SECTION ---
 
             int bestNode = -1;
             int bestColor = -1;
             int bestDelta = Integer.MAX_VALUE;
             int tieCount = 0;
 
-            // Fast iteration over conflict set (No Iterator objects created)
-            int conflictCount = state.getConflictCount();
-            int[] conflictArr = state.getConflictingNodesArray();
+            int conflictCount = state.conflictCount;
+            int[] conflictArr = state.conflictingNodes;
             int k = state.k;
-            int totalV = graph.getTotalVertices();
 
-            // Dynamic Tenure based on conflict size
-            int tabuTenure = TABU_TENURE_BASE + (int)(TABU_TENURE_MULTI * conflictCount);
+            int tabuTenure = TABU_TENURE_BASE + (int) (TABU_TENURE_MULTI * conflictCount);
 
+            // 1. Iterate Conflicts
             for (int i = 0; i < conflictCount; i++) {
                 int u = conflictArr[i];
                 int oldColor = state.colors[u];
-                int uOffset = u * k; // Precompute offset for flattened array
+                int uOffset = u * k;
 
-                // Check all colors
+                int currentConflicts = state.adjCounts[uOffset + oldColor];
+
+                // 2. Iterate Colors
                 for (int c = 0; c < k; c++) {
                     if (c == oldColor) continue;
 
-                    // Fast Lookup in flattened array
-                    int delta = state.adjCounts[uOffset + c] - state.adjCounts[uOffset + oldColor];
+                    int newConflicts = state.adjCounts[uOffset + c];
+                    int delta = newConflicts - currentConflicts;
 
-                    // Check Tabu
                     boolean isTabu = tabuMatrix[uOffset + c] > iterations;
 
                     // Aspiration
@@ -243,13 +288,22 @@ public class IteratedLocalSearch {
                     }
 
                     if (!isTabu) {
+                        // Short-circuit: Perfect Move
+                        if (delta == -currentConflicts) {
+                            bestNode = u;
+                            bestColor = c;
+                            bestDelta = delta;
+                            tieCount = 1;
+                            i = conflictCount; // Break outer
+                            break;
+                        }
+
                         if (delta < bestDelta) {
                             bestNode = u;
                             bestColor = c;
                             bestDelta = delta;
                             tieCount = 1;
                         } else if (delta == bestDelta) {
-                            // Reservoir Sampling: Avoid creating a List<Move>
                             tieCount++;
                             if (random.nextInt(tieCount) == 0) {
                                 bestNode = u;
@@ -262,10 +316,7 @@ public class IteratedLocalSearch {
 
             if (bestNode != -1) {
                 int oldC = state.colors[bestNode];
-
-                // Update Tabu (flattened index)
-                tabuMatrix[bestNode * k + oldC] = (int)(iterations + tabuTenure);
-
+                tabuMatrix[bestNode * k + oldC] = (int) (iterations + tabuTenure);
                 state.updateColor(bestNode, bestColor);
 
                 if (state.totalConflicts < bestConflicts) {
@@ -274,38 +325,28 @@ public class IteratedLocalSearch {
                     perturbationCount = 0;
                 }
             } else {
-                // Dead end (all moves Tabu)
                 perturb(state);
                 lastImprovementIter = iterations;
             }
-
             iterations++;
         }
-        return false;
     }
 
     private void perturb(SolutionState state) {
-        int conflictCount = state.getConflictCount();
+        int conflictCount = state.conflictCount;
         if (conflictCount == 0) return;
 
-        int[] conflictArr = state.getConflictingNodesArray();
-
-        // Strength: if 1 conflict, kick hard. If 100, kick soft.
-        int kickStrength = Math.max(1, Math.min(conflictCount, 4));
+        int kickStrength = (conflictCount < 20) ? 1 : (conflictCount < 50 ? 2 : 4);
 
         for (int i = 0; i < kickStrength; i++) {
-            // Pick random conflict
             int idx = random.nextInt(conflictCount);
-            int u = conflictArr[idx];
-
-            // Force random color
+            int u = state.conflictingNodes[idx];
             int newC = random.nextInt(state.k);
             if (newC == state.colors[u]) newC = (newC + 1) % state.k;
-
             state.updateColor(u, newC);
         }
 
-        // Also kick one random non-conflicting node to change topology
+        // Random topology kick
         int rnd = random.nextInt(graph.getTotalVertices());
         if (graph.isActive(rnd)) {
             int newC = random.nextInt(state.k);
@@ -313,47 +354,42 @@ public class IteratedLocalSearch {
         }
     }
 
+    // --- INNER CLASSES ---
+
     /**
-     * Highly Optimized State Class.
-     * Uses flattened arrays and O(1) Set operations.
+     * Optimized State Class using Jagged Arrays (Reference to Global fastAdj)
      */
     private static class SolutionState {
-        final Graph graph;
+        final int[][] adj;
         final int k;
         final int[] colors;
-
-        // Flattened Adjacency Counts: adjCounts[u * k + c]
-        // This improves cache locality significantly over int[][]
         final int[] adjCounts;
 
         int totalConflicts;
 
-        // Custom "Set" implementation using arrays for O(1) random access and iteration
-        // WITHOUT Integer object allocation.
-        private final int[] conflictingNodes;
-        private final int[] nodeIndices; // Maps nodeID -> index in conflictingNodes
-        private int conflictCount;
+        final int[] conflictingNodes;
+        final int[] nodeIndices;
+        int conflictCount;
 
-        SolutionState(Graph g, int[] initColors, int k) {
-            this.graph = g;
+        SolutionState(int[][] fastAdj, int[] initColors, int k) {
+            this.adj = fastAdj;
             this.k = k;
             this.colors = Arrays.copyOf(initColors, initColors.length);
 
-            int numNodes = g.getTotalVertices();
+            int numNodes = colors.length;
             this.adjCounts = new int[numNodes * k];
             this.conflictingNodes = new int[numNodes];
             this.nodeIndices = new int[numNodes];
             Arrays.fill(nodeIndices, -1);
             this.conflictCount = 0;
 
-            // Initial Scan
-            for (int u : g.getNodes()) {
-                int uColor = colors[u];
-                BitSet neighbors = g.getAdjacencyRules(u); // Direct BitSet Access
+            for (int u = 0; u < numNodes; u++) {
+                if (adj[u].length == 0) continue;
 
+                int uColor = colors[u];
                 int uOffset = u * k;
 
-                for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
+                for (int v : adj[u]) {
                     adjCounts[uOffset + colors[v]]++;
                 }
 
@@ -362,16 +398,14 @@ public class IteratedLocalSearch {
                 }
             }
 
-            // Calculate initial global conflict
             long sum = 0;
             for (int i = 0; i < conflictCount; i++) {
                 int u = conflictingNodes[i];
                 sum += adjCounts[u * k + colors[u]];
             }
-            this.totalConflicts = (int)(sum / 2);
+            this.totalConflicts = (int) (sum / 2);
         }
 
-        // O(1) Add to Set
         private void addConflict(int u) {
             if (nodeIndices[u] == -1) {
                 conflictingNodes[conflictCount] = u;
@@ -380,62 +414,61 @@ public class IteratedLocalSearch {
             }
         }
 
-        // O(1) Remove from Set (Swap with last element)
         private void removeConflict(int u) {
             int idx = nodeIndices[u];
             if (idx != -1) {
                 int lastNode = conflictingNodes[conflictCount - 1];
-
-                // Move last node to the empty slot
                 conflictingNodes[idx] = lastNode;
                 nodeIndices[lastNode] = idx;
-
-                // Clear last slot
                 nodeIndices[u] = -1;
                 conflictCount--;
             }
         }
 
-        int getConflictCount() { return conflictCount; }
-        int[] getConflictingNodesArray() { return conflictingNodes; }
-
         void updateColor(int u, int newColor) {
             int oldColor = colors[u];
             int uOffset = u * k;
 
-            // 1. Update Global Conflicts
             int oldConflicts = adjCounts[uOffset + oldColor];
             int newConflicts = adjCounts[uOffset + newColor];
             totalConflicts = totalConflicts - oldConflicts + newConflicts;
 
             colors[u] = newColor;
 
-            // 2. Update Conflict Set for U
             if (newConflicts > 0) addConflict(u);
             else removeConflict(u);
 
-            // 3. Update Neighbors
-            // We iterate strictly over neighbors.
-            BitSet neighbors = graph.getAdjacencyRules(u);
-            for (int v = neighbors.nextSetBit(0); v >= 0; v = neighbors.nextSetBit(v + 1)) {
+            for (int v : adj[u]) {
                 int vOffset = v * k;
 
-                // v lost a neighbor of oldColor
                 adjCounts[vOffset + oldColor]--;
-
-                // Did v lose a conflict?
                 if (colors[v] == oldColor) {
                     if (adjCounts[vOffset + oldColor] == 0) removeConflict(v);
                 }
 
-                // v gained a neighbor of newColor
                 adjCounts[vOffset + newColor]++;
-
-                // Did v gain a conflict?
                 if (colors[v] == newColor) {
                     addConflict(v);
                 }
             }
+        }
+    }
+
+    /**
+     * Fast XorShift Random Number Generator.
+     * Not thread-safe, but 5-10x faster than java.util.Random.
+     */
+    private static class FastRandom {
+        private long seed;
+        FastRandom(long seed) { this.seed = seed; }
+
+        int nextInt(int bound) {
+            long x = seed;
+            x ^= (x >> 12);
+            x ^= (x << 25);
+            x ^= (x >> 27);
+            seed = x;
+            return (int) (((x * 0x2545F4914F6CDD1DL) >>> 32) % bound);
         }
     }
 }
