@@ -258,9 +258,10 @@ public class IteratedLocalSearch {
 
             if (state.totalConflicts == 0) return true;
 
-            // Perturbation Logic
+            // 1. STANDARD STAGNATION CHECK
+            // If we haven't improved in a long time, force a kick.
             if (iterations - lastImprovementIter > MAX_ITERATIONS_WITHOUT_IMPROVEMENT) {
-                if (perturbationCount >= MAX_PERTURBATIONS_PER_K) return false;
+                if (perturbationCount >= MAX_PERTURBATIONS_PER_K) return false; // Give up
                 perturb(state);
                 lastImprovementIter = iterations;
                 perturbationCount++;
@@ -275,32 +276,33 @@ public class IteratedLocalSearch {
             int[] conflictArr = state.conflictingNodes;
             int k = state.k;
 
-            int tabuTenure = TABU_TENURE_BASE + (int) (TABU_TENURE_MULTI * conflictCount);
+            // Safety cap: Ensure tenure isn't larger than the graph itself to prevent immediate locking
+            // This specifically helps tiny graphs (n < 50)
+            int calculatedTenure = TABU_TENURE_BASE + (int) (TABU_TENURE_MULTI * conflictCount);
+            int tabuTenure = Math.min(calculatedTenure, (graph.getTotalNodes() * k) / 2);
 
-            // 1. Iterate Conflicts
+            // 2. FIND BEST MOVE
             for (int i = 0; i < conflictCount; i++) {
                 int u = conflictArr[i];
                 int oldColor = state.colors[u];
                 int uOffset = u * k;
-
                 int currentConflicts = state.adjCounts[uOffset + oldColor];
 
-                // 2. Iterate Colors
                 for (int c = 0; c < k; c++) {
                     if (c == oldColor) continue;
 
                     int newConflicts = state.adjCounts[uOffset + c];
                     int delta = newConflicts - currentConflicts;
 
+                    // Check Tabu Status
                     boolean isTabu = tabuMatrix[uOffset + c] > iterations;
 
-                    // Aspiration
+                    // Aspiration Criterion
                     if (isTabu && (state.totalConflicts + delta < bestConflicts)) {
                         isTabu = false;
                     }
 
                     if (!isTabu) {
-                        // Short-circuit: Perfect Move
                         if (delta == -currentConflicts) {
                             bestNode = u;
                             bestColor = c;
@@ -326,6 +328,7 @@ public class IteratedLocalSearch {
                 }
             }
 
+            // 3. EXECUTE MOVE
             if (bestNode != -1) {
                 int oldC = state.colors[bestNode];
                 tabuMatrix[bestNode * k + oldC] = (int) (iterations + tabuTenure);
@@ -334,11 +337,18 @@ public class IteratedLocalSearch {
                 if (state.totalConflicts < bestConflicts) {
                     bestConflicts = state.totalConflicts;
                     lastImprovementIter = iterations;
-                    perturbationCount = 0;
+                    perturbationCount = 0; // Reset budget on improvement
                 }
             } else {
+                // --- THE FIX IS HERE ---
+                // We are trapped (all moves are Tabu or yield no valid neighbor).
+                // We must treat this as a failed search path and increment perturbationCount.
+
+                if (perturbationCount >= MAX_PERTURBATIONS_PER_K) return false; // Give up
+
                 perturb(state);
                 lastImprovementIter = iterations;
+                perturbationCount++; // IMPORTANT: Count this forced kick!
             }
             iterations++;
         }
