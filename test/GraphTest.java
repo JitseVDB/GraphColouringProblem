@@ -241,9 +241,6 @@ class GraphTest {
         Path file = createTempDIMACSFile(3, new int[][]{{1, 2}, {2, 3}});
         graph.loadDIMACS(file.toString());
 
-        int originalEdgeCount = graph.getNumberOfEdges();
-        int numberOfNeighbors1 = graph.getNeighborsOf(1).size(); // node 2 in 0-based
-
         // 1.1 Remove a node with multiple neighbors (node 1 in 0-based)
         assertEquals(3, graph.getNumberOfNodes());
         assertEquals(2, graph.getNumberOfEdges());
