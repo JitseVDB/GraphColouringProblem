@@ -78,12 +78,12 @@ public class Graph implements GraphInterface {
      * @param   filename
      *          The path to the DIMACS file to be loaded.
      *
-     * @effect  The number of nodes in the graph is set according to the
+     * @post    The number of nodes in the graph is set according to the
      *          problem definition line ('p').
      *          | nodeCount == declaredNodeCount
      *          | totalNodes == nodeCount
      *
-     * @effect  The adjacency structure, degree array, colour array and
+     * @post    The adjacency structure, degree array, colour array and
      *          activity BitSet are recreated to match the declared number
      *          of nodes.
      *          | adj.length == nodeCount
@@ -91,18 +91,18 @@ public class Graph implements GraphInterface {
      *          | color.length == nodeCount
      *          | active.size() >= nodeCount
      *
-     * @effect  All nodes are marked as active and initialized as uncoloured.
+     * @post    All nodes are marked as active and initialized as uncoloured.
      *          | for each i in 0..nodeCount-1 :
      *          |     active.get(i) == true
      *          |     color[i] == -1
      *
-     * @effect  All edges defined by 'e' lines are inserted into the adjacency
+     * @post    All edges defined by 'e' lines are inserted into the adjacency
      *          representation. Duplicate edges in the file are ignored.
      *          | for each edge (u,v) in the file :
      *          |     adj[u].get(v) == true
      *          |     adj[v].get(u) == true
      *
-     * @effect  Node degrees and the global edge count are updated to match the
+     * @post    Node degrees and the global edge count are updated to match the
      *          number of distinct edges defined in the file.
      *          | degree[i] == number of neighbours of i
      *          | edgeCount == number of distinct undirected edges
@@ -153,7 +153,7 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns a collection of all active nodes (0-based).
+     * Returns a collection of all active nodes.
      *
      * @return An unmodifiable collection containing all active nodes.
      *         | for each v in result: active.get(v)
@@ -169,10 +169,10 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns the current number of active nodes in the graph.
+     * Returns the current number of active nodes.
      *
      * @return The number of active nodes.
-     *         | result == nodeCount
+     *         | result == this.nodeCount
      */
     @Override
     public int getNumberOfNodes() {
@@ -180,40 +180,24 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns the number of nodes in the original graph.
+     * Returns the number of nodes initially present.
      *
      * @return The total number of nodes initially present.
-     *         | result == totalNodes
+     *         | result == this.totalNodes
      */
     public int getTotalNodes() {
         return totalNodes;
     }
 
     /**
-     * Returns the number of edges in the graph.
+     * Returns the number of edges.
      *
      * @return The number of edges.
-     *         | result == edgeCount
+     *         | result == this.edgeCount
      */
     @Override
     public int getNumberOfEdges() {
         return edgeCount;
-    }
-
-    /**
-     * Returns the number of distinct colors currently used in the graph.
-     * Uncolored nodes (color -1) are ignored.
-     *
-     * @return The number of unique colors among all colored nodes.
-     */
-    public int getNumberOfUsedColors() {
-        BitSet used = new BitSet();
-        for (int c : color) {
-            if (c != -1) {
-                used.set(c);
-            }
-        }
-        return used.cardinality();
     }
 
     /**
@@ -370,13 +354,6 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Returns the internal color array.
-     */
-    public int[] getColorArray() {
-        return color;
-    }
-
-    /**
      * Assigns a color to the given node.
      *
      * @param   v
@@ -385,12 +362,20 @@ public class Graph implements GraphInterface {
      * @param   color
      *          The color to assign.
      *
+     * @post    The color of node v is updated.
+     *          | this.color[v] == color
+     *
      * @throws  IllegalArgumentException
      *          If the node does not exist or is inactive.
      *          | v < 0 || v >= totalNodes || !active.get(v)
      *
-     * @effect  The color of node v is updated.
-     *          | this.color[v] == color
+     * @note    This method is intended as a low-level helper for algorithms such
+     *          as RLF and ILS. Calling this method directly does NOT update
+     *          colorCount. The calling algorithm is responsible for
+     *          keeping the color usage statistics consistent.
+     *          Updating colorCount inside this method would be computationally
+     *          expensive as you would have to check if the new color was already
+     *          in use by any other node.
      */
     public void colorNode(int v, int color) {
         if (v < 0 || v >= totalNodes || !active.get(v)) {
@@ -402,9 +387,10 @@ public class Graph implements GraphInterface {
 
     /**
      * Resets the coloring of all active nodes.
-     * After this operation, all active nodes have color -1.
      *
-     * @effect  For every active node u, color[u] == -1.
+     * @post    For every active node u:
+     *          | for each u where active[u]:
+     *          |     color[u] == -1
      */
     public void resetColors() {
         for (int u = 0; u < totalNodes; u++) {
@@ -412,6 +398,28 @@ public class Graph implements GraphInterface {
                 color[u] = -1;
             }
         }
+
+        colorCount = 0;
+    }
+
+    /**
+     * Returns the number of distinct colors currently used in the graph.
+     * Uncolored nodes (color -1) are ignored.
+     *
+     * @return  The number of unique colors among all colored nodes.
+     *          | for each i in 0 .. color.length - 1:
+     *          |     if color[i] != -1:
+     *          |         used.set(color[i])
+     *          | result == used.cardinality()
+     */
+    public int getNumberOfUsedColors() {
+        BitSet used = new BitSet();
+        for (int c : color) {
+            if (c != -1) {
+                used.set(c);
+            }
+        }
+        return used.cardinality();
     }
 
     /**
@@ -428,7 +436,14 @@ public class Graph implements GraphInterface {
      * Checks whether the current coloring is valid.
      * A coloring is valid if no edge connects two nodes of the same color.
      *
-     * @return True if the coloring is valid, false otherwise.
+     * @return  True if no two adjacent active nodes have the same color, false otherwise.
+     *          | for each u in 0 .. totalNodes - 1:
+     *          |     if active.get(u) && color[u] != -1:
+     *          |         for each v in neighbors(u):
+     *          |             if active.get(v) && color[v] != -1:
+     *          |                 if color[u] == color[v]:
+     *          |                     result == false
+     *          | result == true if no such conflict exists
      */
     public boolean isValidColoring() {
         for (int u = active.nextSetBit(0); u >= 0; u = active.nextSetBit(u + 1)) {
@@ -453,21 +468,21 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The node to remove (0-based).
      *
-     * @effect  For every active neighbor u of v, the edge (u, v) is removed:
+     * @post    For every active neighbor u of v, the edge (u, v) is removed:
      *          | for each u where adj[v].get(u):
      *          |     adj[u].get(v) == false
      *          |     degree[u] == old(degree[u]) - 1
      *          | edgeCount == old(edgeCount) - old(degree[v])
      *
-     * @effect  Node v becomes inactive.
+     * @psot    Node v becomes inactive.
      *          | active.get(v) == false
      *
-     * @effect  The adjacency of v is cleared, and its degree and color are reset.
+     * @post    The adjacency of v is cleared, and its degree and color are reset.
      *          | adj[v].cardinality() == 0
      *          | degree[v] == 0
      *          | color[v] == -1
      *
-     * @effect  The node count decreases by one.
+     * @post    The node count decreases by one.
      *          | nodeCount == old(nodeCount) - 1
      *
      * @throws  IllegalArgumentException
@@ -497,47 +512,6 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Adds an undirected edge between nodes u and v.
-     * The edge is only added if it does not already exist.
-     *
-     * @param   u
-     *          One endpoint of the edge (0-based).
-     *
-     * @param   v
-     *          The other endpoint of the edge (0-based).
-     *
-     * @effect  If the edge did not exist previously, both adjacency sets are updated:
-     *          | if !old(adj[u].get(v)):
-     *          |     adj[u].get(v) == true
-     *          |     adj[v].get(u) == true
-     *          |     degree[u] == old(degree[u]) + 1
-     *          |     degree[v] == old(degree[v]) + 1
-     *          |     edgeCount == old(edgeCount) + 1
-     *
-     * @throws  IllegalArgumentException
-     *          If either node is invalid or inactive.
-     *          | u < 0 || u >= totalNodes
-     *          | v < 0 || v >= totalNodes
-     *          | !active.get(u) || !active.get(v)
-     */
-    private void addEdge(int u, int v) {
-        if (u < 0 || u >= totalNodes || v < 0 || v >= totalNodes || !active.get(u) || !active.get(v)) {
-            throw new IllegalArgumentException(
-                    "Both nodes must exist and be active before adding an edge: u=" + u + ", v=" + v
-            );
-        }
-
-        // Only add the edge if it does not exist
-        if (!adj[u].get(v)) {
-            adj[u].set(v);
-            adj[v].set(u);
-            degree[u]++;
-            degree[v]++;
-            edgeCount++;
-        }
-    }
-
-    /**
      * Removes the edge between nodes u and v.
      *
      * @param   u
@@ -546,7 +520,7 @@ public class Graph implements GraphInterface {
      * @param   v
      *          The other endpoint of the edge (0-based).
      *
-     * @effect  If the edge exists, it is removed from both adjacency sets:
+     * @post    If the edge exists, it is removed from both adjacency sets:
      *          | adj[u].get(v) == false
      *          | adj[v].get(u) == false
      *          | degree[u] == old(degree[u]) - 1
@@ -585,14 +559,36 @@ public class Graph implements GraphInterface {
     }
 
     /**
-     * Applies a reduction heuristic that removes all nodes whose degree is
-     * strictly less than a threshold. The threshold is determined as the
-     * current number of used colors in the graph (k from the initial coloring).
+     * Applies a reduction heuristic that removes all active nodes whose degree
+     * is strictly less than the current number of used colors in the graph.
+     *
+     * @post    For each node v that is removed, removes edges from v to its neighbors.
+     *          | for each u in neighbors(v):
+     *          |     adj[u].clear(v)
+     *
+     * @post    For each neighbor u of removed nodes, decreases its degree by 1.
+     *          | for each u in neighbors(v):
+     *          |     new.degree[u] == this.degree[u] - 1
+     *
+     * @post    For each removed edge, decreases the edge count by 1.
+     *          | new.edgeCount == this.edgeCount - 1 per removed edge
+     *
+     * @post    Clears the adjacency list of each removed node.
+     *          | adj[v].isEmpty() == true
+     *
+     * @post    Sets the degree of each removed node to 0.
+     *          | new.degree[v] == 0
+     *
+     * @post    Marks each removed node as inactive.
+     *          | active.get(v) == false
+     *
+     * @post    Decreases the total number of active nodes by 1 for each removed node.
+     *          | new.nodeCount == this.nodeCount - 1 per removed node
      */
     @Override
     public void applyReduction() {
         // Determine threshold: largest known clique equivalent to k of initial coloring.
-        int threshold = getColorCount();
+        int threshold = getNumberOfUsedColors();
 
         // Collect nodes to remove
         List<Integer> toRemove = new ArrayList<>();
@@ -626,10 +622,11 @@ public class Graph implements GraphInterface {
      * The coloring computed by RLF replaces the current coloring of the graph.
      *
      * @effect  The graph receives a new valid coloring.
-     *          | color[v] == rlfColors[v] for each active v
+     *          | for each active v
+     *          |   this.colorNode(node, rlfColors[node])
      *
-     * @effect  The color count is updated.
-     *          | colorCount == getNumberOfUsedColors()
+     * @post    The color count is updated.
+     *          | colorCount == rlf.colorGraph()
      */
     @Override
     public void applyConstructionHeuristic() {
@@ -651,13 +648,14 @@ public class Graph implements GraphInterface {
 
     /**
      * Applies Iterated Local Search (ILS) combined with Tabu Search to improve
-     * the current coloring. The method assumes an initial valid coloring already
-     * exists (e.g., from a constructive heuristic). Improvements are applied
-     * directly to the graph's coloring.
+     * the current coloring. This method assumes that an initial valid coloring
+     * is already present. The solver may update the graph's coloring directly.
      *
-     * @effect  If a better coloring (fewer colors) is found, the graph's colors
-     *          are updated accordingly.
-     *          | colorCount == getNumberOfUsedColors()
+     * @effect  Executes the ILS solver, which may update the color of nodes.
+     *          | ils.solve()
+     *
+     * @post    Updates the cached number of used colors to match the current coloring.
+     *          | new this.colorCount == this.getNumberOfUsedColors()
      */
     @Override
     public void applyStochasticLocalSearchAlgorithm() {
@@ -668,8 +666,6 @@ public class Graph implements GraphInterface {
         IteratedLocalSearch ils = new IteratedLocalSearch(this, timeLimitMillis);
 
         // 3. Run the solver.
-        // NOTE: The ILS class automatically updates 'this' graph
-        // whenever it finds a valid coloring with fewer colors.
         ils.solve();
 
         // 4. Update the internal colorCount cache of the Graph class
@@ -727,5 +723,12 @@ public class Graph implements GraphInterface {
      */
     public BitSet getAdjacencyRules(int v) {
         return adj[v];
+    }
+
+    /**
+     * Returns the internal color array.
+     */
+    public int[] getColorArray() {
+        return color;
     }
 }
