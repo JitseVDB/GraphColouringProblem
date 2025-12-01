@@ -249,52 +249,69 @@ public class RecursiveLargestFirst {
      *
      * @post    The bit representing the given node is cleared in the BitSet representing the uncolored nodes.
      *          | state.U.clear(node)
-
      *
+     * @post    All neighbors of the node that were uncolored before this call
+     *          are removed from U and added to W. The scratch BitSet is used
+     *          to identify the neighbors of the node that are currently colored.
+     *          | scratch.clear()
+     *          | scratch.or(graph.adj[node])
+     *          | scratch.and(state.U)
+     *          | state.U.andNot(scratch)
+     *          | state.W.or(scratch)
      */
     private void moveNodeToColorClass(RLFState state, int node) {
         state.Cv.set(node);
         state.U.clear(node);
 
-        // LOGIC: Neighbors of 'node' that are in U must move to W.
-        // Doing this with BitSets is much faster than iterating int neighbors for dense graphs.
-
         // 1. Load neighbors into scratchpad
         scratch.clear();
-        scratch.or(graph.adj[node]); // fast block copy
+        scratch.or(graph.adj[node]);
 
         // 2. Find intersection with U: These are the nodes to move
         scratch.and(state.U);
 
         // 3. Perform the move
-        // scratch now contains {v | v is neighbor of node AND v is in U}
         state.U.andNot(scratch); // Remove from U
         state.W.or(scratch);     // Add to W
     }
 
     /**
-     * Finds the next vertex maximizing neighbors in W (degreesW), minimizing neighbors in U (degreesU).
-     * Uses on-the-fly BitSet intersection which is O(N/64) instead of O(N) loop.
+     * Finds the next node to add to the current color class.
+     *
+     * The node is selected from the uncolored set U as the one that has the
+     * fewest uncolored neighbors in W (forbidden set), breaking ties
+     * arbitrarily. This heuristic tends to maximize the color class size.
+     *
+     * @param   state
+     *          The current RLF state containing U, W, and Cv.
+     *
+     * @post    The scratch BitSet is used to compute degW and degU as follows:
+     *          | for each v in state.U:
+     *          |     scratch.clear()
+     *          |     scratch.or(graph.adj[v])
+     *          |     scratch.and(state.W)
+     *          |     let degW = scratch.cardinality()
+     *          |     if degW > maxDegW:
+     *          |         scratch.clear()
+     *          |         scratch.or(graph.adj[v])
+     *          |         scratch.and(state.U)
+     *          |         let degU = scratch.cardinality()
+     *          |     else if degW == maxDegW:
+     *          |         scratch.clear()
+     *          |         scratch.or(graph.adj[v])
+     *          |         scratch.and(state.U)
+     *          |         let degU = scratch.cardinality()
+     *
+     * @return  The index of the next node to add to the color class,
+     *          or -1 if no eligible nodes remain.
+     *          | result == -1 || state.U.get(result) == true
      */
     private int findNextNode(RLFState state) {
         int bestNode = -1;
         int maxDegW = -1;
         int minDegU = Integer.MAX_VALUE;
 
-        // We iterate over U.
-        // For dense graphs, iterating U is fast, but calculating degrees is the bottleneck.
-        // using scratchpad intersection is faster than iterating neighbor-arrays.
-
         for (int v = state.U.nextSetBit(0); v >= 0; v = state.U.nextSetBit(v + 1)) {
-
-            // Calculate DegW: Intersection of Neighbors(v) and W
-            // We use the scratchpad (carefully, as we are in a loop)
-            // Actually, we can't reuse 'this.scratch' easily inside a loop if we are nested.
-            // But here we are just counting.
-
-            // OPTIMIZATION: Manually intersect without clone if possible?
-            // Java BitSet doesn't allow "cardinalityOfIntersection" without modifying a set.
-            // However, modifying a `temp` set is still faster than iterating arrays for dense graphs.
 
             BitSet neighbors = graph.adj[v];
 
@@ -304,8 +321,8 @@ public class RecursiveLargestFirst {
             scratch.and(state.W);
             int degW = scratch.cardinality();
 
+            // Only calculate DegU if strictly better
             if (degW > maxDegW) {
-                // Only calculate DegU if strictly better (Lazy calc)
                 scratch.clear();
                 scratch.or(neighbors);
                 scratch.and(state.U);
@@ -314,8 +331,7 @@ public class RecursiveLargestFirst {
                 maxDegW = degW;
                 minDegU = degU;
                 bestNode = v;
-            } else if (degW == maxDegW) {
-                // Tie-breaker
+            } else if (degW == maxDegW) { // Tie-breaker
                 scratch.clear();
                 scratch.or(neighbors);
                 scratch.and(state.U);
@@ -330,15 +346,36 @@ public class RecursiveLargestFirst {
         return bestNode;
     }
 
+    /**
+     * Selects the top M candidate nodes from the uncolored set U
+     * based on their degree inside U (number of adjacent uncolored nodes).
+     *
+     * The selection is deterministic: if multiple nodes have the same degree,
+     * the first M encountered in iteration order are chosen.
+     *
+     * @param   state
+     *          The current RLF state containing the set of uncolored nodes.
+     *
+     * @post    The scratch BitSet is used to compute the degree of each node in U:
+     *          | for each v in state.U:
+     *          |     scratch.clear()
+     *          |     scratch.or(graph.adj[v])
+     *          |     scratch.and(state.U)
+     *          |     let degreeInU[v] = scratch.cardinality()
+     *
+     * @return  An array of the top candidate vertices for starting a new color class.
+     *          | result.length == min(M, state.U.cardinality())
+     *          | for each i in 0 .. result.length - 1:
+     *          |     result[i] in state.U
+     *          | for each i, j in 0 .. result.length - 1:
+     *          |     if i < j then degreeInU[result[i]] >= degreeInU[result[j]]
+     */
+    // TODO: @return formal logic
     private int[] getTopMnodes(RLFState state) {
         int uSize = state.U.cardinality();
         if (uSize == 0) return new int[0];
 
         int limit = Math.min(M, uSize);
-
-        // We need 'degrees in U' for all nodes in U to sort them.
-        // Since we are not maintaining degreesU incrementally, we calculate it once here.
-        // This is O(U * N/64), which is fine to do once per color class.
 
         Integer[] candidates = new Integer[uSize];
         int idx = 0;
@@ -365,6 +402,13 @@ public class RecursiveLargestFirst {
         return result;
     }
 
+    /**
+     * A class representing graphs.
+     *
+     * @author  Jitse Vandenberghe
+     *
+     * @version 1.0
+     */
     private static class RLFState {
         int n;
         BitSet U;  // Uncolored nodes

@@ -4,8 +4,14 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collection;
 
+/**
+ * A JUnit (5) test class for testing the non-private methods of the RecursiveLargestFirst Class.
+ *
+ * @author  Jitse Vandenberghe
+ *
+ * @version 1.0
+ */
 import static org.junit.jupiter.api.Assertions.*;
 
 class RecursiveLargestFirstTest {

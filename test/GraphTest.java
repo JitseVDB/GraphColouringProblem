@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * A JUnit (5) test class for testing the non-private methods of the Graph Class.
  *
  * @author  Jitse Vandenberghe
+ *
  * @version 1.0
  */
 class GraphTest {
