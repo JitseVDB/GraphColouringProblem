@@ -18,6 +18,10 @@ import java.util.*;
  */
 public class RecursiveLargestFirst {
 
+    /**********************************************************
+     * Variables
+     **********************************************************/
+
     /**
      * The graph that will be colored.
      */
@@ -48,6 +52,10 @@ public class RecursiveLargestFirst {
      * A reusable scratch BitSet for fast logical operations without reallocating memory.
      */
     private final BitSet scratch;
+
+    /**********************************************************
+     * Constants
+     **********************************************************/
 
     /**
      * Upper bound on the number of trial candidates to evaluate.
@@ -90,7 +98,7 @@ public class RecursiveLargestFirst {
      *          | new.M == max(1, min((int)(P * new.n), MAX_TRIALS))
      *
      * @post    The scratch BitSet is initialized as an empty BitSet with capacity n.
-     *          | new.scratch.length() <= new.n
+     *          | new.scratch = new BitSet(n)
      */
     public RecursiveLargestFirst(Graph graph, double P) {
         this.graph = graph;
@@ -370,7 +378,6 @@ public class RecursiveLargestFirst {
      *          | for each i, j in 0 .. result.length - 1:
      *          |     if i < j then degreeInU[result[i]] >= degreeInU[result[j]]
      */
-    // TODO: @return formal logic
     private int[] getTopMnodes(RLFState state) {
         int uSize = state.U.cardinality();
         if (uSize == 0) return new int[0];
@@ -403,18 +410,91 @@ public class RecursiveLargestFirst {
     }
 
     /**
-     * A class representing graphs.
+     * A class storing the state of the Recursive Largest First (RLF) graph coloring
+     * algorithm during execution.
      *
-     * @author  Jitse Vandenberghe
+     * This state keeps track of three sets: U, containing all nodes that are still uncolored;
+     * Cv, containing the nodes that have been chosen for the color class currently being
+     * constructed; and W, containing nodes that remain uncolored but are temporarily forbidden
+     * from joining the current color class because they are adjacent to at least one vertex
+     * already added to that class.
+     *
+     * The RLF algorithm repeatedly builds one color class at a time. During the
+     * construction of a single color class, nodes move from U to either Cv (if they
+     * are chosen for the class) or W (if they cannot join the class due to adjacency
+     * constraints).
+     *
+     * Once a color class is completed, Cv and W are cleared, and the next color
+     * class is built using the remaining nodes in U.
+     *
+     * @author  Jitse
      *
      * @version 1.0
      */
     private static class RLFState {
-        int n;
-        BitSet U;  // Uncolored nodes
-        BitSet Cv; // Current color class
-        BitSet W;  // Forbidden (moved out of U)
 
+        /**
+         * Total number of nodes in the graph (including inactive ones).
+         */
+        int n;
+
+        /**
+         * Bit set indicating which nodes are currently uncolored.
+         *
+         * Each bit corresponds to a node in the graph.
+         * A bit set to 1 means that the node is uncolored.
+         * A bit set to 0 means that the node has been assigned a color.
+         */
+        BitSet U;
+
+        /**
+         * Bit set indicating which nodes are part of the current color class.
+         *
+         * Each bit corresponds to a node in the graph.
+         * A bit set to 1 means that the node is part of the color class being constructed.
+         * A bit set to 0 means that the node is not part of the color class being constructed.
+         */
+        BitSet Cv;
+
+        /**
+         * Bit set indicating which nodes are forbidden from joining the current color class.
+         *
+         * A node becomes forbidden when it is adjacent to a node already in the current color
+         * class (Cv). This ensures the class remains an independent set, as required by proper
+         * graph coloring.
+         *
+         * These nodes are still uncolored overall but cannot join this particular
+         * color class. They remain candidates for later classes.
+         *
+         * Each bit corresponds to a node in the graph.
+         * A bit set to 1 means that the node is uncolored but cannot join the color class being constructed.
+         * A bit set to 0 means that the node is not forbidden to join the color class being constructed.
+         */
+        BitSet W;
+
+        /**********************************************************
+         * Constructors
+         **********************************************************/
+
+        /**
+         * Initialize a new Recursive Largest First (RLF) state.
+         *
+         * @post    The total number of nodes in the graph (including inactive nodes)
+         *          is registered as a copy of n in the RecursiveLargestFirst class.
+         *          | new.n == RecursiveLargestFirst.n
+         *
+         * @post    The U BitSet is initialized as an empty BitSet with capacity n.
+         *          This BitSet will be used to indiciate uncolored nodes.
+         *          | new.U = new BitSet()
+         *
+         * @post    The Cv BitSet is initialized as an empty BitSet with capacity n.
+         *          This BitSet will be used to indicate nodes part of the current color class.
+         *          | new.Cv = new BitSet()
+         *
+         * @post    The W BitSet is initialized as an empty BitSet with capacity n.
+         *          This BitSet will be used to track forbidden nodes for the current color class.
+         *          | new.W = new BitSet()
+         */
         RLFState(int n) {
             this.n = n;
             this.U = new BitSet(n);
@@ -422,7 +502,28 @@ public class RecursiveLargestFirst {
             this.W = new BitSet(n);
         }
 
-        // Fast Copy Constructor
+        /**
+         * Initialize a new Recursive Largest First (RLF) state as a copy of a given state.
+         *
+         * @param   other
+         *          The state you want to create a copy of.
+         *
+         * @post    The total number of nodes in the graph (including inactive nodes)
+         *          is registered as a copy of n in the RecursiveLargestFirst class.
+         *          | new.n == other.n
+         *
+         * @post    The U BitSet is initialized as a copy of the U BitSet of the given RLFState.
+         *          This BitSet will be used to indiciate uncolored nodes.
+         *          | new.U = other.U.clone()
+         *
+         * @post    The Cv BitSet is initialized as a copy of the Cv BitSet of the given RLFState.
+         *          This BitSet will be used to indicate nodes part of the current color class.
+         *          | new.Cv = other.Cv.clone()
+         *
+         * @post    The W BitSet is initialized as a copy of the W BitSet of the given RLFState.
+         *          This BitSet will be used to ...
+         *          | new.W = other.W.clone()
+         */
         RLFState(RLFState other) {
             this.n = other.n;
             this.U = (BitSet) other.U.clone();

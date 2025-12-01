@@ -12,6 +12,10 @@ import java.util.*;
  */
 public class Graph implements GraphInterface {
 
+    /**********************************************************
+     * Variables
+     **********************************************************/
+
     /**
      * Array of bit sets representing the adjacency structure of the graph.
      *
@@ -68,7 +72,6 @@ public class Graph implements GraphInterface {
      * The number of distinct colors used in the coloring of the graph.
      */
     private int colorCount;
-
 
     /**
      * Loads a graph from a DIMACS format file (.col).
