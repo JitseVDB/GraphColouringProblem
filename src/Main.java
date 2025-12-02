@@ -2,10 +2,59 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Scanner;
 
+/**
+ * Entry point for testing graph reduction, visualization, and construction
+ * heuristics on a set of DIMACS graph files.
+ *
+ * This class iterates over a predefined list of graph files located in the
+ * `DIMACSGraphs/` directory. For each graph, it performs the following steps:
+ * - Loads the graph from a DIMACS-format file.
+ * - Displays the original graph using `GraphVisualizer`.
+ * - Applies a reduction procedure that removes nodes with degree below a
+ *   certain threshold.
+ * - Displays the reduced graph.
+ * - Applies a construction heuristic to generate a feasible coloring.
+ * - Displays the constructed coloring.
+ *
+ * The user is prompted to press ENTER before moving to the next step to allow
+ * interactive visualization of each stage.
+ *
+ * @author Jitse
+ *
+ * @version 1.0
+ */
 public class Main {
 
+    /**
+     * The directory where the DIMACS graph files are stored.
+     */
     private static final String GRAPH_DIR = "DIMACSGraphs/";
 
+    /**
+     * Main entry point for processing a set of graph files.
+     *
+     * @param   args
+     *          Command-line arguments (not used in this implementation).
+     *
+     * @post    Each graph in the predefined `testFiles` array is processed sequentially.
+     *          The original graph, reduced graph, and constructed coloring are displayed
+     *          via `GraphVisualizer`. Reduction and construction procedures are applied
+     *          in-place to each graph.
+     *          | for each file in testFiles :
+     *          |     if file exists :
+     *          |         Graph g = new Graph()
+     *          |         g.loadDIMACS(file)
+     *          |         GraphVisualizer.show(g, file + " [ORIGINAL]")
+     *          |         g.applyReduction()
+     *          |         GraphVisualizer.show(g, file + " [REDUCED]")
+     *          |         g.applyConstructionHeuristic()
+     *          |         GraphVisualizer.show(g, file + " [FEASIBLE COLORING]")
+     *
+     * @post    The program terminates cleanly after processing all files and
+     *          closing the Scanner.
+     *          | scanner.isClosed()
+     *          | System.exit(0) is called
+     */
     public static void main(String[] args) {
         String[] testFiles = {
                 "DSJC125.1.col",
@@ -36,7 +85,6 @@ public class Main {
                 // STEP 1: SHOW ORIGINAL GRAPH
                 System.out.println("Original Graph -> Nodes: " + originalNodeCount + ", Edges: " + originalEdgeCount);
 
-                // Color a few nodes just to see orientation better
                 if (originalNodeCount > 0) g.colorNode(1, 0);
 
                 GraphVisualizer.show(g, file + " [ORIGINAL]");
@@ -71,7 +119,7 @@ public class Main {
                 g.applyConstructionHeuristic();
                 long durationConstruction = System.nanoTime() - startTimeConstruction;
 
-                System.out.println("Construction complete in " + (durationReduction / 1000000) + "ms.");
+                System.out.println("Construction complete in " + (durationConstruction / 1000000) + "ms.");
 
                 // STEP 5: SHOW CONSTRUCTED COLORING
                 GraphVisualizer.show(g, file + " [FEASIBLE COLORING]");
@@ -79,7 +127,6 @@ public class Main {
                 System.out.println(">> Constructed graph coloring displayed.");
                 System.out.println(">> Press ENTER to load the next file...");
                 scanner.nextLine();
-
 
             } catch (IOException e) {
                 e.printStackTrace();

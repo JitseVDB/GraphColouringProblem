@@ -1,11 +1,16 @@
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class BenchmarkRunner {
 
+    // --- Configuration ---
     private static final String GRAPH_DIR = "DIMACSGraphs/";
-
+    private static final String RESULTS_DIR = "BenchmarkResults/"; // New results directory
     private static final String EXTENSION = ".col";
 
     private static final String[] BENCHMARK_GRAPHS_BASE = {
@@ -21,7 +26,7 @@ public class BenchmarkRunner {
             "le450_25a", "le450_25b", "le450_25c", "le450_25d",
             "mulsol.i.1", "mulsol.i.2", "mulsol.i.3", "mulsol.i.4", "mulsol.i.5",
             "latin_square_10",
-            "qg.order30", "qg.order40", "qg.order60", "qg.order100",
+            "qg.order30", "qg.order40", "qg.order60", //"qg.order100",
             "queen5_5", "queen6_6", "queen7_7", "queen8_8", "queen8_12",
             "queen9_9", "queen10_10", "queen11_11", "queen12_12",
             "queen13_13", "queen14_14", "queen15_15", "queen16_16",
@@ -32,118 +37,187 @@ public class BenchmarkRunner {
 
     public static void main(String[] args) {
 
-        System.out.println("Running benchmark on " + BENCHMARK_GRAPHS_BASE.length + " graphs...\n");
-
-        for (String baseName : BENCHMARK_GRAPHS_BASE) {
-            System.out.println("================================================");
-            System.out.println("GRAPH: " + baseName);
-            System.out.println("------------------------------------------------");
-
-            String filename = baseName + EXTENSION;
-            File f = new File(GRAPH_DIR + filename);
-
-            if (!f.exists()) {
-                System.err.println("ERROR: File not found at " + f.getAbsolutePath());
-                continue;
+        // 1. Setup Directory and Filename
+        File resultsDir = new File(RESULTS_DIR);
+        if (!resultsDir.exists()) {
+            boolean created = resultsDir.mkdirs();
+            if (!created) {
+                System.err.println("ERROR: Could not create directory " + RESULTS_DIR);
+                return;
             }
-
-            Graph g = new Graph();
-
-            try {
-                // Load graph
-                g.loadDIMACS(GRAPH_DIR + filename);
-                int originalNodes = g.getNumberOfNodes();
-                int originalEdges = g.getNumberOfEdges();
-
-                System.out.println("\n[ ORIGINAL GRAPH ]");
-                System.out.printf("  Nodes: %-6d Edges: %-6d%n", originalNodes, originalEdges);
-
-                // Construction Heuristic
-                long startConstruction = System.nanoTime();
-                g.applyConstructionHeuristic();
-                long durationConstruction = System.nanoTime() - startConstruction;
-
-                boolean validColoring = g.isValidColoring();
-                int colorsUsed = g.getColorCount();
-
-                System.out.println("\n[ CONSTRUCTION HEURISTIC ]");
-                System.out.printf("  Colors Used: %-6d Valid: %-6s Time: %d ms%n",
-                        colorsUsed, validColoring, durationConstruction / 1_000_000);
-
-                // Reduction
-                long startReduction = System.nanoTime();
-                g.applyReduction();
-                long durationReduction = System.nanoTime() - startReduction;
-
-                int reducedNodes = g.getNumberOfNodes();
-                int reducedEdges = g.getNumberOfEdges();
-                int removedNodes = originalNodes - reducedNodes;
-
-                System.out.println("\n[ REDUCTION ]");
-                System.out.printf("  Nodes: %-6d Edges: %-6d Removed: %-6d Time: %d ms%n",
-                        reducedNodes, reducedEdges, removedNodes, durationReduction / 1_000_000);
-
-                // ILS Stochastic Search
-                long startStochasticSearch = System.nanoTime();
-                g.applyStochasticLocalSearchAlgorithm();
-                long durationStochasticSearch = System.nanoTime() - startStochasticSearch;
-
-                validColoring = g.isValidColoring();
-                colorsUsed = g.getColorCount();
-
-                System.out.println("\n[ STOCHASTIC LOCAL SEARCH ]");
-                System.out.printf("  Colors Used: %-6d Valid: %-6s Time: %d ms%n",
-                        colorsUsed, validColoring, durationStochasticSearch / 1_000_000);
-
-                // Paper comparison
-                System.out.println("\n[ PAPER REFERENCE RESULTS ]");
-
-                ILSResultsPaper.GraphResult paperResult = ILSResultsPaper.getResult(baseName);
-
-                try {
-                    int medPaperColors = paperResult.getMed();
-                    int minPaperColors = paperResult.getMin();
-                    double paperTimeSec = paperResult.getTimeSec();
-
-                    System.out.printf("  Min Colors: %-6d Median Colors: %-6d Time: %.2f s%n",
-                            minPaperColors, medPaperColors, paperTimeSec);
-
-                    // Compare results
-                    System.out.print("  Comparison:   ");
-
-                    if (colorsUsed < minPaperColors) {
-                        System.out.println("Better than paper minimum!");
-                    } else if (colorsUsed == minPaperColors) {
-                        System.out.println("Matches paper minimum.");
-                    } else if (colorsUsed <= medPaperColors) {
-                        System.out.println("Between minimum and median.");
-                    } else {
-                        System.out.println("Worse than paper median.");
-                    }
-
-                    double speedRatio = (durationConstruction + durationReduction + durationStochasticSearch)
-                            / (paperTimeSec * 1_000_000_000);
-
-                    if (speedRatio < 1) {
-                        System.out.printf("  Speed:        Faster (%.2fx)%n", 1.0 / speedRatio);
-                    } else {
-                        System.out.printf("  Speed:        Slower (%.2fx)%n", speedRatio);
-                    }
-
-                } catch (Exception e) {
-                    System.out.println("  No paper results available for this graph.");
-                }
-
-                System.out.println();
-
-            } catch (Exception e) {
-                System.err.println("Unexpected error on graph: " + filename);
-                e.printStackTrace();
-            }
-
-            System.out.println("================================================\n");
         }
 
-        System.out.println("Benchmark complete.");
+        // Generate filename with timestamp: benchmark_results_yyyy-MM-dd_HH-mm-ss.csv
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
+        String timestamp = LocalDateTime.now().format(dtf);
+        String csvFileName = "benchmark_results_" + timestamp + ".csv";
+        File csvFile = new File(resultsDir, csvFileName);
+
+        System.out.println("Running benchmark on " + BENCHMARK_GRAPHS_BASE.length + " graphs...");
+        System.out.println("Writing results to: " + csvFile.getAbsolutePath() + "\n");
+
+        // 2. Open Writer and Run Benchmark
+        try (PrintWriter csvWriter = new PrintWriter(new FileWriter(csvFile))) {
+
+            // Write CSV Header
+            csvWriter.println("Graph_Name,Original_Nodes,Original_Edges," +
+                    "Constr_Colors,Constr_Valid,Constr_Time_ms," +
+                    "Reduc_Nodes,Reduc_Edges,Reduc_Time_ms," +
+                    "ILS_Colors,ILS_Valid,ILS_Time_ms," +
+                    "Paper_Min,Paper_Med,Paper_Time_s,Comparison_Note,Speed_Ratio");
+
+            for (String baseName : BENCHMARK_GRAPHS_BASE) {
+                System.out.println("================================================");
+                System.out.println("GRAPH: " + baseName);
+                System.out.println("------------------------------------------------");
+
+                String filename = baseName + EXTENSION;
+                File f = new File(GRAPH_DIR + filename);
+
+                if (!f.exists()) {
+                    System.err.println("ERROR: File not found at " + f.getAbsolutePath());
+                    // Log missing file to CSV to maintain row alignment
+                    csvWriter.println(baseName + ",FILE_NOT_FOUND,,,,,,,,,,,,,,,");
+                    continue;
+                }
+
+                Graph g = new Graph();
+
+                try {
+                    // --- Load graph ---
+                    g.loadDIMACS(GRAPH_DIR + filename);
+                    int originalNodes = g.getNumberOfNodes();
+                    int originalEdges = g.getNumberOfEdges();
+
+                    System.out.println("\n[ ORIGINAL GRAPH ]");
+                    System.out.printf("  Nodes: %-6d Edges: %-6d%n", originalNodes, originalEdges);
+
+                    // --- Construction Heuristic ---
+                    long startConstruction = System.nanoTime();
+                    g.applyConstructionHeuristic();
+                    long durationConstruction = System.nanoTime() - startConstruction;
+                    long constTimeMs = durationConstruction / 1_000_000;
+
+                    boolean constValid = g.isValidColoring();
+                    int constColors = g.getColorCount();
+
+                    System.out.println("\n[ CONSTRUCTION HEURISTIC ]");
+                    System.out.printf("  Colors Used: %-6d Valid: %-6s Time: %d ms%n",
+                            constColors, constValid, constTimeMs);
+
+                    // --- Reduction ---
+                    long startReduction = System.nanoTime();
+                    g.applyReduction();
+                    long durationReduction = System.nanoTime() - startReduction;
+                    long reducTimeMs = durationReduction / 1_000_000;
+
+                    int reducedNodes = g.getNumberOfNodes();
+                    int reducedEdges = g.getNumberOfEdges();
+                    int removedNodes = originalNodes - reducedNodes;
+
+                    System.out.println("\n[ REDUCTION ]");
+                    System.out.printf("  Nodes: %-6d Edges: %-6d Removed: %-6d Time: %d ms%n",
+                            reducedNodes, reducedEdges, removedNodes, reducTimeMs);
+
+                    // --- ILS Stochastic Search ---
+                    long startStochasticSearch = System.nanoTime();
+                    g.applyStochasticLocalSearchAlgorithm();
+                    long durationStochasticSearch = System.nanoTime() - startStochasticSearch;
+                    long ilsTimeMs = durationStochasticSearch / 1_000_000;
+
+                    boolean ilsValid = g.isValidColoring();
+                    int ilsColors = g.getColorCount();
+
+                    System.out.println("\n[ STOCHASTIC LOCAL SEARCH ]");
+                    System.out.printf("  Colors Used: %-6d Valid: %-6s Time: %d ms%n",
+                            ilsColors, ilsValid, ilsTimeMs);
+
+                    // --- Paper comparison ---
+                    System.out.println("\n[ PAPER REFERENCE RESULTS ]");
+
+                    // Variables for CSV (default to "N/A" values)
+                    String paperMinStr = "N/A";
+                    String paperMedStr = "N/A";
+                    String paperTimeStr = "N/A";
+                    String comparisonNote = "N/A";
+                    String speedRatioStr = "N/A";
+
+                    try {
+                        ILSResultsPaper.GraphResult paperResult = ILSResultsPaper.getResult(baseName);
+                        int medPaperColors = paperResult.getMed();
+                        int minPaperColors = paperResult.getMin();
+                        double paperTimeSec = paperResult.getTimeSec();
+
+                        // Update strings for CSV
+                        paperMinStr = String.valueOf(minPaperColors);
+                        paperMedStr = String.valueOf(medPaperColors);
+                        paperTimeStr = String.format("%.2f", paperTimeSec);
+
+                        System.out.printf("  Min Colors: %-6d Median Colors: %-6d Time: %.2f s%n",
+                                minPaperColors, medPaperColors, paperTimeSec);
+
+                        // Compare results
+                        System.out.print("  Comparison:   ");
+
+                        if (ilsColors < minPaperColors) {
+                            comparisonNote = "Better than paper min";
+                            System.out.println(comparisonNote + "!");
+                        } else if (ilsColors == minPaperColors) {
+                            comparisonNote = "Matches paper min";
+                            System.out.println(comparisonNote + ".");
+                        } else if (ilsColors <= medPaperColors) {
+                            comparisonNote = "Between min and median";
+                            System.out.println(comparisonNote + ".");
+                        } else {
+                            comparisonNote = "Worse than paper median";
+                            System.out.println(comparisonNote + ".");
+                        }
+
+                        double totalTimeSec = (durationConstruction + durationReduction + durationStochasticSearch) / 1_000_000_000.0;
+                        double speedRatio = totalTimeSec / paperTimeSec;
+
+                        if (speedRatio < 1) {
+                            speedRatioStr = String.format("Faster (%.2fx)", 1.0 / speedRatio);
+                            System.out.printf("  Speed:        %s%n", speedRatioStr);
+                        } else {
+                            speedRatioStr = String.format("Slower (%.2fx)", speedRatio);
+                            System.out.printf("  Speed:        %s%n", speedRatioStr);
+                        }
+
+                    } catch (Exception e) {
+                        System.out.println("  No paper results available for this graph.");
+                    }
+
+                    // Write the CSV Row
+                    csvWriter.printf("%s,%d,%d,%d,%b,%d,%d,%d,%d,%d,%b,%d,%s,%s,%s,%s,%s%n",
+                            baseName,
+                            originalNodes, originalEdges,
+                            constColors, constValid, constTimeMs,
+                            reducedNodes, reducedEdges, reducTimeMs,
+                            ilsColors, ilsValid, ilsTimeMs,
+                            paperMinStr, paperMedStr, paperTimeStr, comparisonNote, speedRatioStr
+                    );
+
+                    // Flush to ensure data is written immediately
+                    csvWriter.flush();
+
+                    System.out.println();
+
+                } catch (Exception e) {
+                    System.err.println("Unexpected error on graph: " + filename);
+                    e.printStackTrace();
+                    csvWriter.println(baseName + ",ERROR,,,,,,,,,,,,,,,");
+                }
+
+                System.out.println("================================================\n");
+            }
+
+            System.out.println("Benchmark complete.");
+            System.out.println("Full results saved to: " + csvFile.getAbsolutePath());
+
+        } catch (IOException e) {
+            System.err.println("CRITICAL ERROR: Could not write to CSV file.");
+            e.printStackTrace();
+        }
     }
 }

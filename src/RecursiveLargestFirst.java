@@ -433,6 +433,10 @@ public class RecursiveLargestFirst {
      */
     private static class RLFState {
 
+        /**********************************************************
+         * Variables
+         **********************************************************/
+
         /**
          * Total number of nodes in the graph (including inactive ones).
          */
