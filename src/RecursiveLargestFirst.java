@@ -209,7 +209,7 @@ public class RecursiveLargestFirst {
     /**
      * Constructs a single color class within the given RLF state.
      *
-     * The method begins by inserting the given {@code firstNode} into the
+     * The method begins by inserting the given firstNode into the
      * color class. It then repeatedly selects the next eligible vertex (a
      * vertex nonadjacent to all already-selected vertices), and moves it to
      * the color class, until no such vertex remains.

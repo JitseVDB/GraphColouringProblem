@@ -10,7 +10,7 @@ public class BenchmarkRunner {
 
     // --- Configuration ---
     private static final String GRAPH_DIR = "DIMACSGraphs/";
-    private static final String RESULTS_DIR = "BenchmarkResults/"; // New results directory
+    private static final String RESULTS_DIR = "BenchmarkResults/";
     private static final String EXTENSION = ".col";
 
     private static final String[] BENCHMARK_GRAPHS_BASE = {
@@ -37,7 +37,7 @@ public class BenchmarkRunner {
 
     public static void main(String[] args) {
 
-        // 1. Setup Directory and Filename
+        // 1. Setup Directory
         File resultsDir = new File(RESULTS_DIR);
         if (!resultsDir.exists()) {
             boolean created = resultsDir.mkdirs();
@@ -47,16 +47,24 @@ public class BenchmarkRunner {
             }
         }
 
-        // Generate filename with timestamp: benchmark_results_yyyy-MM-dd_HH-mm-ss.csv
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
-        String timestamp = LocalDateTime.now().format(dtf);
-        String csvFileName = "benchmark_results_" + timestamp + ".csv";
+        // 2. Determine Filename
+        // CHANGE: Check if a filename was passed in args (from BatchRunner)
+        String csvFileName;
+        if (args.length > 0 && args[0] != null && !args[0].isEmpty()) {
+            csvFileName = args[0];
+        } else {
+            // Default behavior if run manually
+            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
+            String timestamp = LocalDateTime.now().format(dtf);
+            csvFileName = "benchmark_results_" + timestamp + ".csv";
+        }
+
         File csvFile = new File(resultsDir, csvFileName);
 
         System.out.println("Running benchmark on " + BENCHMARK_GRAPHS_BASE.length + " graphs...");
         System.out.println("Writing results to: " + csvFile.getAbsolutePath() + "\n");
 
-        // 2. Open Writer and Run Benchmark
+        // 3. Open Writer and Run Benchmark
         try (PrintWriter csvWriter = new PrintWriter(new FileWriter(csvFile))) {
 
             // Write CSV Header
@@ -76,7 +84,6 @@ public class BenchmarkRunner {
 
                 if (!f.exists()) {
                     System.err.println("ERROR: File not found at " + f.getAbsolutePath());
-                    // Log missing file to CSV to maintain row alignment
                     csvWriter.println(baseName + ",FILE_NOT_FOUND,,,,,,,,,,,,,,,");
                     continue;
                 }
@@ -135,7 +142,6 @@ public class BenchmarkRunner {
                     // --- Paper comparison ---
                     System.out.println("\n[ PAPER REFERENCE RESULTS ]");
 
-                    // Variables for CSV (default to "N/A" values)
                     String paperMinStr = "N/A";
                     String paperMedStr = "N/A";
                     String paperTimeStr = "N/A";
@@ -148,7 +154,6 @@ public class BenchmarkRunner {
                         int minPaperColors = paperResult.getMin();
                         double paperTimeSec = paperResult.getTimeSec();
 
-                        // Update strings for CSV
                         paperMinStr = String.valueOf(minPaperColors);
                         paperMedStr = String.valueOf(medPaperColors);
                         paperTimeStr = String.format("%.2f", paperTimeSec);
@@ -156,7 +161,6 @@ public class BenchmarkRunner {
                         System.out.printf("  Min Colors: %-6d Median Colors: %-6d Time: %.2f s%n",
                                 minPaperColors, medPaperColors, paperTimeSec);
 
-                        // Compare results
                         System.out.print("  Comparison:   ");
 
                         if (ilsColors < minPaperColors) {
@@ -198,9 +202,7 @@ public class BenchmarkRunner {
                             paperMinStr, paperMedStr, paperTimeStr, comparisonNote, speedRatioStr
                     );
 
-                    // Flush to ensure data is written immediately
                     csvWriter.flush();
-
                     System.out.println();
 
                 } catch (Exception e) {
@@ -208,13 +210,9 @@ public class BenchmarkRunner {
                     e.printStackTrace();
                     csvWriter.println(baseName + ",ERROR,,,,,,,,,,,,,,,");
                 }
-
                 System.out.println("================================================\n");
             }
-
-            System.out.println("Benchmark complete.");
-            System.out.println("Full results saved to: " + csvFile.getAbsolutePath());
-
+            System.out.println("Benchmark complete for file: " + csvFileName);
         } catch (IOException e) {
             System.err.println("CRITICAL ERROR: Could not write to CSV file.");
             e.printStackTrace();
