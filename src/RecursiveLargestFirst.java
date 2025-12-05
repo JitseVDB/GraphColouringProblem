@@ -158,11 +158,7 @@ public class RecursiveLargestFirst {
         RLFState mainState = new RLFState(n);
 
         // Load active vertices into U
-        for (int v = 0; v < n; v++) {
-            if (graph.isActive(v)) {
-                mainState.U.set(v);
-            }
-        }
+        mainState.U.or(graph.getActiveNodes());
 
         // Build color classes until no vertices remain
         while (!mainState.U.isEmpty()) {

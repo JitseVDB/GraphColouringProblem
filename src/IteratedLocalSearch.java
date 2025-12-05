@@ -954,7 +954,9 @@ public class IteratedLocalSearch {
             x ^= (x << 25);
             x ^= (x >> 27);
             seed = x;
-            return (int) (((x * 0x2545F4914F6CDD1DL) >>> 32) % bound);
+
+            long raw = (x * 0x2545F4914F6CDD1DL) >>> 32;
+            return (int) (raw % bound);
         }
     }
 }

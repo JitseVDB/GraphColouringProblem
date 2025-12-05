@@ -591,7 +591,7 @@ public class Graph implements GraphInterface {
     @Override
     public void applyReduction() {
         // Determine threshold: largest known clique equivalent to k of initial coloring.
-        int threshold = getNumberOfUsedColors();
+        int threshold = getColorCount();
 
         // Collect nodes to remove
         List<Integer> toRemove = new ArrayList<>();
@@ -733,5 +733,12 @@ public class Graph implements GraphInterface {
      */
     public int[] getColorArray() {
         return color;
+    }
+
+    /**
+     * Returns the BitSet representing active nodes.
+     */
+    public BitSet getActiveNodes() {
+        return active;
     }
 }

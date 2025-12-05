@@ -4,7 +4,7 @@ import java.time.format.DateTimeFormatter;
 public class BatchRunner {
 
     // Configuration
-    private static final int TOTAL_RUNS = 50; // Set to 30 or 50 as needed
+    private static final int TOTAL_RUNS = 10; // Set to 30 or 50 as needed
 
     public static void main(String[] args) {
 

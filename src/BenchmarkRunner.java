@@ -26,7 +26,7 @@ public class BenchmarkRunner {
             "le450_25a", "le450_25b", "le450_25c", "le450_25d",
             "mulsol.i.1", "mulsol.i.2", "mulsol.i.3", "mulsol.i.4", "mulsol.i.5",
             "latin_square_10",
-            "qg.order30", "qg.order40", "qg.order60", //"qg.order100",
+            "qg.order30", "qg.order40", "qg.order60", "qg.order100",
             "queen5_5", "queen6_6", "queen7_7", "queen8_8", "queen8_12",
             "queen9_9", "queen10_10", "queen11_11", "queen12_12",
             "queen13_13", "queen14_14", "queen15_15", "queen16_16",
@@ -48,12 +48,10 @@ public class BenchmarkRunner {
         }
 
         // 2. Determine Filename
-        // CHANGE: Check if a filename was passed in args (from BatchRunner)
         String csvFileName;
         if (args.length > 0 && args[0] != null && !args[0].isEmpty()) {
             csvFileName = args[0];
         } else {
-            // Default behavior if run manually
             DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
             String timestamp = LocalDateTime.now().format(dtf);
             csvFileName = "benchmark_results_" + timestamp + ".csv";
@@ -177,15 +175,27 @@ public class BenchmarkRunner {
                             System.out.println(comparisonNote + ".");
                         }
 
+                        // --- UPDATED SPEED RATIO LOGIC ---
                         double totalTimeSec = (durationConstruction + durationReduction + durationStochasticSearch) / 1_000_000_000.0;
-                        double speedRatio = totalTimeSec / paperTimeSec;
 
-                        if (speedRatio < 1) {
-                            speedRatioStr = String.format("Faster (%.2fx)", 1.0 / speedRatio);
-                            System.out.printf("  Speed:        %s%n", speedRatioStr);
+                        // Check for div by zero or missing data
+                        if(paperTimeSec <= 0.0) {
+                            speedRatioStr = "INF";
+                            System.out.println("  Speed:        Infinite (Paper time 0 or N/A)");
                         } else {
-                            speedRatioStr = String.format("Slower (%.2fx)", speedRatio);
-                            System.out.printf("  Speed:        %s%n", speedRatioStr);
+                            double rawRatio = totalTimeSec / paperTimeSec;
+
+                            if (rawRatio < 1.0) {
+                                // FASTER
+                                double factor = 1.0 / rawRatio;
+                                speedRatioStr = String.format("%.2f", factor); // CSV: 3.55
+                                System.out.printf("  Speed:        Faster (%.2fx)%n", factor);
+                            } else {
+                                // SLOWER
+                                double factor = rawRatio;
+                                speedRatioStr = String.format("%.2f", -factor); // CSV: -4.87
+                                System.out.printf("  Speed:        Slower (%.2fx)%n", factor);
+                            }
                         }
 
                     } catch (Exception e) {
